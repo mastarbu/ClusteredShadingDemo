@@ -1,5 +1,6 @@
 #pragma once
 #include "XavierBase.h"
+#include "time.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #include <SDL2/SDL_vulkan.h>
@@ -62,10 +63,9 @@ namespace Xavier {
         if (!(rst = render.Draw()))
           break;
       }
-      SDL_Delay(10);
+      // std::cout << "zavi";
+       SDL_Delay(10);
     }
-
-    render.CleanUp();
     return rst;
   }
 

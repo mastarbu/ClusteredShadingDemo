@@ -40,6 +40,7 @@ Create and destroy a Vulkan surface on an SDL window.
 #include <SDL2/SDL_vulkan.h>
 #include <vulkan/vulkan.h>
 
+#include <sstream>
 #include <iostream>
 #include <vector>
 #include "Xavier.h"
@@ -47,21 +48,17 @@ Create and destroy a Vulkan surface on an SDL window.
 
 namespace Xavier
 {
-    bool XRender::Draw()
-    {
-        
-    }
-
     bool XRender::onWindowSizeChanged()
     {
-        
+        return true;
     }
 
-    bool XRender::prepareXRenderer(SDLWindow &win)
+    bool XRender::Prepare(SDLWindow &win)
     {
         // Initialization for Vulkan Infrastructure.
         winParam = win.getSDLWindowParameters();
-        prepareVulkan();
+        if (!prepareVulkan()) { return false; }
+         
         // Prepare all the things before we get into the render loop. 
         // Including:
         // Load Resource Data;
@@ -70,8 +67,8 @@ namespace Xavier
         // Create Descriptor Sets (Layouts?);
         // Create Pipelines;
         // Record the commands into command buffer.
-        prepareRenderSample();
-        
+        if (!prepareRenderSample()) { return false; }
+        return true;
     }
 
     bool XRender::prepareVulkan()
@@ -92,7 +89,7 @@ namespace Xavier
     bool XRender::createInstance()
     {
         // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
-        unsigned extension_count;
+        unsigned extension_count = 0;
         if (!SDL_Vulkan_GetInstanceExtensions(winParam.pWindow, &extension_count, NULL))
         {
             std::cout << "Could not get the number of required instance extensions from SDL." << std::endl;
@@ -106,21 +103,55 @@ namespace Xavier
             return false;
         }
 
-        // Use validation layers if this is a debug build
 #if defined(_DEBUG)
+        // Use validation layers if this is a debug build.
         xParams.xLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+        xParams.xInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 #endif
+        // Enumerate all layers supported by Vulkan.
+        uint32_t layerCount = 0;
+        ZV_VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, nullptr));
+
+        std::vector<VkLayerProperties> supportedLayers(layerCount);
+        ZV_VK_CHECK(vkEnumerateInstanceLayerProperties(&layerCount, supportedLayers.data()));
+
+        // Check If the layers we need are all supported by the Vulkan.
+        for (size_t i = 0; i < xParams.xLayers.size(); ++i)
+        {
+            if (!checkInstanceLayersSupport(supportedLayers, xParams.xLayers[i]))
+            {
+                std::cout << "Layer: " << xParams.xLayers[i] << "is not supported by Vulkan." << std::endl;
+                return false;
+            }
+        }
+        
+        // Enumerate all instance extensions supported by Vulkan.
+        uint32_t instanceExtensionsCount = 0;
+        ZV_VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionsCount, nullptr));
+
+        std::vector<VkExtensionProperties> instanceExtensions(instanceExtensionsCount);
+        ZV_VK_CHECK(vkEnumerateInstanceExtensionProperties(nullptr, &instanceExtensionsCount, instanceExtensions.data()));
+
+        // Check If the instance extensions we need are all supported by the Vulkan.
+        for (size_t i = 0; i < xParams.xInstanceExtensions.size(); ++i)
+        {
+            if (!checkInstanceExtensionsSupport(instanceExtensions, xParams.xInstanceExtensions[i]))
+            {
+                std::cout << "Instance Extensions: " << xParams.xInstanceExtensions[i] << "is not supported by the Vulkan !" << std::endl;
+                return false;
+            }
+        }
 
         // VkApplicationInfo allows the programmer to specify basic information about the
         // program, which can be useful for layers and tools to provide more debug information.
         VkApplicationInfo appInfo = {};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pNext = NULL;
-        appInfo.pApplicationName = "Vulkan Program Template";
+        appInfo.pApplicationName = "Zavi's Demo";
         appInfo.applicationVersion = 1;
         appInfo.pEngineName = "LunarG SDK";
         appInfo.engineVersion = 1;
-        appInfo.apiVersion = VK_API_VERSION_1_0;
+        appInfo.apiVersion = VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION);
 
         // VkInstanceCreateInfo is where the programmer specifies the layers and/or extensions that
         // are needed.
@@ -156,29 +187,79 @@ namespace Xavier
         VkDebugReportObjectTypeEXT                   objectType,
         uint64_t                                     object,
         size_t                                       location,
-        int32_t                                      messageCode,
+        int32_t                                      msgCode,
         const char *                                 pLayerPrefix,
-        const char *                                 pMessage,
+        const char *                                 pMsg,
         void *                                       pUserData)
     {
-        std::cout << "FlagsEXT: " << flags << "  "
-            << "ObjectTypeEXT: " << objectType << "  "
-            << "obj: " << object << "  "
-            << "location: " << location << "  "
-            << "messageCode: " << messageCode << "  "
-            << "Layer Prefix: " << pLayerPrefix << "  "
-            << "Message:" << pMessage << "  "
-            ;
+        std::stringstream debugInfo;
+        
+        if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)
+        {
+            debugInfo << "[ERROR]";
+        }
+        // Warnings may hint at unexpected / non-spec API usage
+        if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT)
+        {
+            debugInfo << "[WARNING]";
+        }
+        // May indicate sub-optimal usage of the API
+        if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT)
+        {
+            debugInfo << "[PERFORMANCE]";
+        }
+        // Informal messages that may become handy during debugging
+        if (flags & VK_DEBUG_REPORT_INFORMATION_BIT_EXT)
+        {
+            debugInfo << "[INFO]";
+        }
+        // Diagnostic info from the Vulkan loader and layers
+        // Usually not helpful in terms of API usage, but may help to debug layer and loader problems 
+        if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT)
+        {
+            debugInfo << "[DEBUG]";
+        }
+
+        // Display message to default output (console/logcat)
+        std::stringstream debugMessage;
+        debugInfo << " {" << pLayerPrefix << "} Code " << msgCode << " : " << pMsg;
+
+        if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)
+        {
+            std::cerr << debugInfo.str() << std::endl;
+        }
+        else
+        {
+            std::cout << debugInfo.str() << std::endl;
+        }
+        
+        fflush(stdout);
+
+
         return VK_FALSE;
     }
 
     bool XRender::initDebug()
     {
+        PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallback = NULL;
+        PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallback = NULL;
+        if (!(vkCreateDebugReportCallback = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(xParams.xInstance, "vkCreateDebugReportCallbackEXT")))
+        {
+            std::cout << "Can not get function: vkCreateDebugReportCallbackEXT" << std::endl;
+            return false;
+        }
+
+        if (!(vkDestroyDebugReportCallback = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(xParams.xInstance, "vkDestroyDebugReportCallbackEXT")))
+        {
+            std::cout << "Can not get function: vkDestroyDebugReportCallbackEXT" << std::endl;
+            return false;
+        }
+
         VkDebugReportFlagsEXT interestedMask = VK_DEBUG_REPORT_INFORMATION_BIT_EXT 
-            & VK_DEBUG_REPORT_WARNING_BIT_EXT
-            & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT
-            & VK_DEBUG_REPORT_ERROR_BIT_EXT
-            & VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+            | VK_DEBUG_REPORT_WARNING_BIT_EXT
+            | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT
+            | VK_DEBUG_REPORT_ERROR_BIT_EXT
+            | VK_DEBUG_REPORT_DEBUG_BIT_EXT;
         VkDebugReportCallbackCreateInfoEXT debugReportCallbackInfo = {};
         debugReportCallbackInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT;
         debugReportCallbackInfo.pNext = nullptr;
@@ -186,7 +267,7 @@ namespace Xavier
         debugReportCallbackInfo.pfnCallback = static_cast<PFN_vkDebugReportCallbackEXT>(zvDebugReportCallback);
         debugReportCallbackInfo.pUserData = "X-Renderer is using debug report extension !!";
 
-        if (vkCreateDebugReportCallbackEXT(xParams.xInstance, &debugReportCallbackInfo, nullptr, &xParams.xReportCallback) != VK_SUCCESS)
+        if (vkCreateDebugReportCallback(xParams.xInstance, &debugReportCallbackInfo, nullptr, &xParams.xReportCallback) != VK_SUCCESS)
         {
             std::cout << "Creating DebugCallback Failed !" << std::endl;
             return false;
@@ -270,7 +351,7 @@ namespace Xavier
         deviceCreateInfo.ppEnabledExtensionNames = xParams.xDeviceExtensions.data();
         deviceCreateInfo.pEnabledFeatures = nullptr;
 
-        if (!vkCreateDevice(xParams.xPhysicalDevice, &deviceCreateInfo, nullptr, &xParams.xDevice) != VK_SUCCESS)
+        if (vkCreateDevice(xParams.xPhysicalDevice, &deviceCreateInfo, nullptr, &xParams.xDevice) != VK_SUCCESS)
         {
             std::cout << "Creation for the Device Failed !" << std::endl;
             return false;
@@ -302,8 +383,8 @@ namespace Xavier
         }
         // Device Extension Support Check.
         {
-            uint32_t extensionCount;
-            if (vkEnumerateDeviceExtensionProperties(xParams.xPhysicalDevice, nullptr, &extensionCount, nullptr) != VK_SUCCESS ||
+            uint32_t extensionCount = 0;
+            if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr) != VK_SUCCESS ||
                 extensionCount == 0)
             {
                 std::cout << "Physical Device: " << physicalDevice << " Extension Enumeration Failed" << std::endl;
@@ -311,7 +392,7 @@ namespace Xavier
             }
 
             std::vector<VkExtensionProperties> physicalDeviceExtensionProperties(extensionCount);
-            if (vkEnumerateDeviceExtensionProperties(xParams.xPhysicalDevice, nullptr, &extensionCount, &physicalDeviceExtensionProperties[0]) != VK_SUCCESS ||
+            if (vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, &physicalDeviceExtensionProperties[0]) != VK_SUCCESS ||
                 extensionCount == 0)
             {
                 std::cout << "Physical Device: " << physicalDevice << " Extension Enumeration Failed" << std::endl;
@@ -346,7 +427,7 @@ namespace Xavier
             uint32_t selectedPresentQueueFamilyIndex = UINT32_MAX;
             for (uint32_t j = 0; j < queueFamiliesCount; ++j)
             {
-                if (!vkGetPhysicalDeviceSurfaceSupportKHR(xParams.xPhysicalDevice, j, xParams.xSurface, &queueFamiliesSurfaceSupport[j]) != VK_SUCCESS)
+                if (vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, j, xParams.xSurface, &queueFamiliesSurfaceSupport[j]) != VK_SUCCESS)
                 {
                     std::cout << "Can not get whether queue family: " << j << " in Physical Device: " << physicalDevice << " supports surface extension !" << std::endl;
                     return false;
@@ -374,6 +455,26 @@ namespace Xavier
                 presentQueueFamilyIndex = selectedPresentQueueFamilyIndex;
                 return true;
             }
+        }
+        return false;
+    }
+
+    bool XRender::checkInstanceLayersSupport(const std::vector<VkLayerProperties>& layersProperties, const char * targetLayer)
+    {
+        for (VkLayerProperties layerProp : layersProperties)
+        {
+            if (strcmp(targetLayer, layerProp.layerName) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    bool XRender::checkInstanceExtensionsSupport(const std::vector<VkExtensionProperties>& extensionProperties, const char * targetExtension)
+    {
+        for (VkExtensionProperties extensionProp : extensionProperties)
+        {
+            if (strcmp(targetExtension, extensionProp.extensionName) == 0)
+            return true;
         }
         return false;
     }
@@ -551,34 +652,3 @@ namespace Xavier
 
 }
 
-int main()
-{
-    // Create a Vulkan surface for rendering
-
-    // This is where most initialization for a program should be performed
-
-    // Poll for user input.
-    bool stillRunning = true;
-    while (stillRunning) {
-
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-
-            switch (event.type) {
-
-            case SDL_QUIT:
-                stillRunning = false;
-                break;
-
-            default:
-                // Do nothing. 
-                std::cout << "Xavier" << std::endl;
-                break;
-            }
-        }
-
-
-    }
-
-    return 0;
-}

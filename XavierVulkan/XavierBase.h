@@ -5,12 +5,13 @@
 #include <vulkan/vulkan.h>
 
 namespace Xavier {
+  class SDLWindow;
   class XRenderBase {
   // Methods
   public:
+    virtual bool Prepare(SDLWindow &window) = 0;
     virtual bool Draw() = 0;
     virtual bool onWindowSizeChanged() = 0;
-    virtual void CleanUp() = 0;
 
     bool readyToDraw() { return CanRender; }
 

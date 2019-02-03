@@ -1,6 +1,24 @@
 #pragma once
+#include <fstream>
+#include <iostream>
 #include "XavierBase.h"
 #include <vector>
+
+// Macro for return value checking of the Vulkan API calls.
+#define ZV_VK_CHECK( x ) { \
+	VkResult ret = x; \
+	if ( ret != VK_SUCCESS ) { \
+        std::cout << "VK: " << #x << ", error code: " << ret << std::endl; \
+        return false; \
+    } \
+}
+
+#define ZV_VK_VALIDATE( x, msg ) { \
+	if ( !( x ) ) { \
+        std::cout << "VK: " << msg << " - " << #x << std::endl; \
+        return false; \
+    } \
+}
 
 namespace Xavier {
 
@@ -31,6 +49,22 @@ namespace Xavier {
         { }
     };
 
+    struct XBuffer {
+        VkBuffer handle;
+        VkDeviceMemory memory;
+        uint32_t size;
+    };
+
+    struct XVertexData {
+        struct Position {
+            float x, y, z; 
+        } pos;
+
+        struct Color {
+            float r, g, b, a;
+        } color;
+    };
+    
     struct XRenderParas {
 
         std::vector<const char *> xLayers;
@@ -52,6 +86,18 @@ namespace Xavier {
 
         XSwapchain xSwapchain;
 
+        VkCommandPool xRenderCmdPool;
+        
+        VkFramebuffer xFramebuffer;
+
+        VkRenderPass xRenderPass;
+
+        VkPipeline xPipeline;
+        VkPipelineLayout xPipelineLayout;
+
+        XBuffer xVertexBuffer;
+
+
 #if defined (_DEBUG)
         VkDebugReportCallbackEXT xReportCallback;
 #endif
@@ -59,22 +105,18 @@ namespace Xavier {
     };
 
     struct XVirtualFrameData {
-        VkFence CPUGetChargeCmdBuff;
-        VkSemaphore swapchainImageAvailableSignal;
-        VkSemaphore renderFinishedSignal;
+        VkFence CPUGetChargeOfCmdBufFence;
+        VkSemaphore swapchainImageAvailableSemphore;
+        VkSemaphore renderFinishedSemphore;
         VkCommandBuffer commandBuffer;
-
-        VkPipeline pipeline;
-
     };
 
     class XRender : public XRenderBase
     {
         // Methods
     public:
-        bool Draw() override;
         bool onWindowSizeChanged() override;
-        bool prepareXRenderer(SDLWindow &win);
+        bool Prepare(SDLWindow &win);
 
         virtual bool prepareRenderSample() = 0;
 
@@ -90,8 +132,9 @@ namespace Xavier {
         bool createSwapChain();
 
         bool checkQueueFamilySupport(VkPhysicalDevice physicalDevice, uint32_t &graphicQueueFamilyIndex, uint32_t &presentQueueFamilyIndex);
+        bool checkInstanceLayersSupport(const std::vector<VkLayerProperties> &layersProperties, const char *targetLayer);
+        bool checkInstanceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
         bool checkPhysicalDeviceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
-
         // helper functions.
         uint32_t xGetImagesCountForSwapchain(const VkSurfaceCapabilitiesKHR &surfaceCap)
         {
@@ -177,14 +220,38 @@ namespace Xavier {
             return static_cast<VkPresentModeKHR>(-1);
         }
 
+    protected:
+        std::vector<char> m_getFileBinaryContent(const std::string &fileName)
+        {
+            std::vector<char> bytes;
+            std::ifstream file(fileName, std::ios::binary);
+            if (file.fail())
+            {
+                std::cout << "Open File: " << fileName.c_str() << "Failed !" << std::endl;
+            }
+            else
+            {
+                std::streampos begin, end;
+                begin = file.tellg();
+                file.seekg(0, std::ios::end);
+                end = file.tellg();
+
+                // Read the file from begin to end.
+                bytes.resize(end - begin);
+                file.seekg(0, std::ios::beg);
+                file.read(bytes.data(), static_cast<size_t>(end - begin));
+            }
+            return bytes;
+        }
+       
+        
+      protected:
         // 9 Attributes
         SDLWindowPara winParam;
         XRenderParas xParams;
 
         std::vector<XVirtualFrameData> xVirtualFrames;
         size_t currentFrameIndex;
-
-        
 
     };
 

@@ -106,6 +106,7 @@ namespace Xavier
 #if defined(_DEBUG)
         // Use validation layers if this is a debug build.
         xParams.xLayers.push_back("VK_LAYER_LUNARG_standard_validation");
+        xParams.xLayers.push_back("VK_LAYER_RENDERDOC_Capture");
         xParams.xInstanceExtensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 #endif
         // Enumerate all layers supported by Vulkan.
@@ -321,7 +322,7 @@ namespace Xavier
             }
         }
         std::vector<float> queuePriorities = { 1.0f };
-        VkDeviceQueueCreateInfo queueCreateInfos[2] = {};
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos(2);
 
         // Graphic queue.
         queueCreateInfos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -339,11 +340,15 @@ namespace Xavier
         queueCreateInfos[1].queueCount = queuePriorities.size();
         queueCreateInfos[1].pQueuePriorities = queuePriorities.data();
 
+        // If the Graphic queue is identical to the Present queue, Only one queue's information is needed.
+        if (graphicQueueFamilyIndex == presentQueueFamilyIndex)
+            queueCreateInfos.resize(1);
+
         VkDeviceCreateInfo deviceCreateInfo = {};
         deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         deviceCreateInfo.pNext = nullptr;
         deviceCreateInfo.flags = 0;
-        deviceCreateInfo.queueCreateInfoCount = sizeof(queueCreateInfos) / sizeof(VkDeviceQueueCreateInfo);
+        deviceCreateInfo.queueCreateInfoCount = queueCreateInfos.size();
         deviceCreateInfo.pQueueCreateInfos = &queueCreateInfos[0];
         deviceCreateInfo.enabledLayerCount = 0;
         deviceCreateInfo.ppEnabledLayerNames = nullptr;
@@ -582,7 +587,7 @@ namespace Xavier
         swapchainCreateInfo.preTransform = imagesTransform;
         swapchainCreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         swapchainCreateInfo.presentMode = swapchainPresentMode;
-        swapchainCreateInfo.clipped = VK_FALSE;
+        swapchainCreateInfo.clipped = VK_TRUE;
         swapchainCreateInfo.oldSwapchain = oldSwapchain;
 
         if (vkCreateSwapchainKHR(xParams.xDevice, &swapchainCreateInfo, nullptr, &xParams.xSwapchain.handle) != VK_SUCCESS)
@@ -597,7 +602,8 @@ namespace Xavier
         }
 
         xParams.xSwapchain.format = imagesFormat.format;
-        
+        xParams.xSwapchain.extent = imagesExtent;
+
         uint32_t imagesCount = 0;
         if (vkGetSwapchainImagesKHR(xParams.xDevice, xParams.xSwapchain.handle, &imagesCount, nullptr) != VK_SUCCESS
             || imagesCount == 0)

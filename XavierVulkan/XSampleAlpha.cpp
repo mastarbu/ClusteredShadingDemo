@@ -12,7 +12,6 @@ namespace Xavier {
 
         prepareVertexInput();
 
-        recoredCommands();
         return true;
     }
 
@@ -20,6 +19,110 @@ namespace Xavier {
 
     bool XSampleA::Draw()
     {
+        // Initialization for the CurrentFrameData.
+        static CurrentFrameData currentFrameData = {
+            0,
+            xVirtualFrames.size(),
+            &xVirtualFrames[0],
+            &xParams.xSwapchain,
+            0,
+        };
+
+        //Move the index Forward by 1.
+        currentFrameData.frameIndex = (currentFrameData.frameIndex + 1) % currentFrameData.frameCount;
+        currentFrameData.virtualFrameData = &xVirtualFrames.at(currentFrameData.frameIndex);
+
+        VkCommandBufferBeginInfo cmdBufBeginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+        cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        cmdBufBeginInfo.pNext = nullptr;
+        // Only useful when record a secondary command buffer.
+        cmdBufBeginInfo.pInheritanceInfo = nullptr;
+        // Wait for the point when command buffer exits pending state.
+        vkWaitForFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence, VK_TRUE, 200000ll);
+
+        // Reset the fence
+        vkResetFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence);
+        // Acquire Image.
+        VkResult rst = vkAcquireNextImageKHR(xParams.xDevice, xParams.xSwapchain.handle, 200, currentFrameData.virtualFrameData->swapchainImageAvailableSemphore, VkFence(), &currentFrameData.swapChainImageIndex);
+
+        std::cout << "rst:" << rst << std::endl;;
+        // Create FrameBuffer
+
+        if (currentFrameData.virtualFrameData->frameBuffer != VK_NULL_HANDLE)
+            vkDestroyFramebuffer(xParams.xDevice, currentFrameData.virtualFrameData->frameBuffer, nullptr);
+
+        VkFramebufferCreateInfo framebufferCreateInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+
+        framebufferCreateInfo.pNext = nullptr;
+        framebufferCreateInfo.flags = 0;
+        framebufferCreateInfo.renderPass = xParams.xRenderPass;
+        framebufferCreateInfo.attachmentCount = 1;
+        framebufferCreateInfo.pAttachments = &xParams.xSwapchain.images[currentFrameData.swapChainImageIndex].view;
+        framebufferCreateInfo.width = xParams.xSwapchain.extent.width;
+        framebufferCreateInfo.height = xParams.xSwapchain.extent.height;
+        framebufferCreateInfo.layers = 1;
+
+        ZV_VK_CHECK(vkCreateFramebuffer(xParams.xDevice, &framebufferCreateInfo, nullptr, &currentFrameData.virtualFrameData->frameBuffer));
+
+        std::vector<float> colorClearValue = { 0.5f, 0.5f, 0.5f, 0.0f };
+        VkClearValue clearColor;
+        memcpy(&clearColor, colorClearValue.data(), sizeof(float) * colorClearValue.size());
+
+        // Begin to record command buffer.
+        vkBeginCommandBuffer(currentFrameData.virtualFrameData->commandBuffer, &cmdBufBeginInfo);
+        VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+        renderPassBeginInfo.renderPass = xParams.xRenderPass;
+        renderPassBeginInfo.framebuffer = currentFrameData.virtualFrameData->frameBuffer;
+        renderPassBeginInfo.renderArea = {
+            VkOffset2D {0, 0},
+            VkExtent2D {xParams.xSwapchain.extent.width, xParams.xSwapchain.extent.height},
+        };
+        renderPassBeginInfo.clearValueCount = 1;
+        renderPassBeginInfo.pClearValues = &clearColor;
+
+        // recording starts.
+        vkCmdBeginRenderPass(currentFrameData.virtualFrameData->commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE );
+        // 1. Bind my pipeline to the graphic binding point.
+        vkCmdBindPipeline(currentFrameData.virtualFrameData->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, xParams.xPipeline);
+        // 2. Set the dynamic state for the pipeline.
+        // 3. Bind Vertex Input Buffer.
+        std::vector<VkDeviceSize> offsets = { 0ll };
+        vkCmdBindVertexBuffers(currentFrameData.virtualFrameData->commandBuffer, 0, 1, &xParams.xVertexBuffer.handle, offsets.data());
+        // 4. Bind Descriptor Set.
+        // 5. Push Constants.
+        // 5. Draw Call.
+        vkCmdDraw(currentFrameData.virtualFrameData->commandBuffer, 6, 1, 0, 0);
+        vkCmdEndRenderPass(currentFrameData.virtualFrameData->commandBuffer);
+
+        vkEndCommandBuffer(currentFrameData.virtualFrameData->commandBuffer);
+        
+        // Submit the command buffer.
+        VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+        VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+        submitInfo.pNext = nullptr;
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = &currentFrameData.virtualFrameData->swapchainImageAvailableSemphore;
+        submitInfo.pWaitDstStageMask = &waitDstStageMask;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &currentFrameData.virtualFrameData->commandBuffer;
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = &currentFrameData.virtualFrameData->renderFinishedSemphore;
+
+        ZV_VK_CHECK(vkQueueSubmit(xParams.xGraphicQueue, 1, &submitInfo, currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence));  
+
+        // Present the image.
+        VkResult presentResult;
+        VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+        presentInfo.pNext = nullptr;
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = &currentFrameData.virtualFrameData->renderFinishedSemphore;
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = &xParams.xSwapchain.handle;
+        presentInfo.pImageIndices = &currentFrameData.swapChainImageIndex;
+        presentInfo.pResults = &presentResult;
+
+        ZV_VK_CHECK(vkQueuePresentKHR(xParams.xPresentQueue, &presentInfo));
         return true;
     }
 
@@ -62,13 +165,13 @@ namespace Xavier {
 
         /// Color Attachment.
         attachmentDescriptions[0].flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
-        attachmentDescriptions[0].format = VK_FORMAT_R8G8B8A8_UNORM;
+        attachmentDescriptions[0].format = xParams.xSwapchain.format;
         attachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         attachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attachmentDescriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attachmentDescriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        attachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
         /// The only color attachment reference
@@ -93,23 +196,24 @@ namespace Xavier {
         VkSubpassDependency subpassDependency[2] = {};
         subpassDependency[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         subpassDependency[0].dstSubpass = 0;
-        subpassDependency[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        subpassDependency[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
         subpassDependency[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        subpassDependency[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        subpassDependency[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
         subpassDependency[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         subpassDependency[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         subpassDependency[1].srcSubpass = 0;
         subpassDependency[1].dstSubpass = VK_SUBPASS_EXTERNAL;
         subpassDependency[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        subpassDependency[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        subpassDependency[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
         subpassDependency[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        subpassDependency[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        subpassDependency[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
         subpassDependency[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
         /// Create Render Pass
         VkRenderPassCreateInfo renderPassCreateInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO };
         renderPassCreateInfo.pNext = nullptr;
+        renderPassCreateInfo.flags = 0;
         renderPassCreateInfo.attachmentCount = 1;
         renderPassCreateInfo.pAttachments = &attachmentDescriptions[0];
         renderPassCreateInfo.subpassCount = 1;
@@ -184,7 +288,7 @@ namespace Xavier {
         vertexInputAttr[0].binding = 0;
         vertexInputAttr[0].format = VK_FORMAT_R32G32B32_SFLOAT;
         vertexInputAttr[0].location = 0;
-        vertexInputAttr[0].offset = 0;
+        vertexInputAttr[0].offset = offsetof(XVertexData, pos);
 
         vertexInputAttr[1].binding = 0;
         vertexInputAttr[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -192,11 +296,11 @@ namespace Xavier {
         vertexInputAttr[1].offset = offsetof(XVertexData, color);
 
         VkPipelineVertexInputStateCreateInfo vertexInput = { VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO };
-        vertexInput.pNext = 0;
+        vertexInput.pNext = nullptr;
         vertexInput.flags = 0;
         vertexInput.vertexBindingDescriptionCount = 1;
         vertexInput.pVertexBindingDescriptions = &vertexInputBind[0];
-        vertexInput.vertexAttributeDescriptionCount = 1;
+        vertexInput.vertexAttributeDescriptionCount = 2;
         vertexInput.pVertexAttributeDescriptions = &vertexInputAttr[0];
 
         /// Vertex Input Assembly state.
@@ -283,13 +387,13 @@ namespace Xavier {
         multisampleState.alphaToOneEnable = VK_FALSE;
         multisampleState.alphaToCoverageEnable = VK_FALSE;
 
-        VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
-        depthStencilState.pNext = nullptr;
-        depthStencilState.flags = 0;
-        depthStencilState.depthTestEnable = VK_TRUE;
-        // depthWriteEnable decides whether the depth value needs to be replaced with the new value when it pass the depth test.
-        depthStencilState.depthWriteEnable = VK_TRUE;
-        depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        //VkPipelineDepthStencilStateCreateInfo depthStencilState = { VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
+        //depthStencilState.pNext = nullptr;
+        //depthStencilState.flags = 0;
+        //depthStencilState.depthTestEnable = VK_TRUE;
+        //// depthWriteEnable decides whether the depth value needs to be replaced with the new value when it pass the depth test.
+        //depthStencilState.depthWriteEnable = VK_TRUE;
+        //depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
         /*
             The depth-bounds test is a special, additional test that can be performed as part of depth testing. The
@@ -312,12 +416,12 @@ namespace Xavier {
             If the colorBlendEnable member of each VkPipelineColorBlendAttachmentState
             structure is VK_TRUE, then blending is applied to the corresponding color attachment.
         */
-        colorBlendAttachment[0].blendEnable = VK_TRUE;
-        colorBlendAttachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-        colorBlendAttachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment[0].blendEnable = VK_FALSE;
+        colorBlendAttachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
         colorBlendAttachment[0].colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        colorBlendAttachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        colorBlendAttachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
         colorBlendAttachment[0].alphaBlendOp = VK_BLEND_OP_ADD;
         colorBlendAttachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 
@@ -325,7 +429,7 @@ namespace Xavier {
         VkPipelineColorBlendStateCreateInfo colorBlendState = { VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO };
         colorBlendState.pNext = nullptr;
         colorBlendState.flags = 0;
-        colorBlendState.logicOpEnable = VK_TRUE;
+        colorBlendState.logicOpEnable = VK_FALSE;
         colorBlendState.logicOp = VK_LOGIC_OP_COPY;
         colorBlendState.attachmentCount = 1;
         colorBlendState.pAttachments = &colorBlendAttachment[0];
@@ -344,7 +448,7 @@ namespace Xavier {
         graphicPipelineCreateInfo.pViewportState = &viewportState;
         graphicPipelineCreateInfo.pRasterizationState = &rasterizationStateCreateInfo;
         graphicPipelineCreateInfo.pMultisampleState = &multisampleState;
-        graphicPipelineCreateInfo.pDepthStencilState = &depthStencilState;
+        graphicPipelineCreateInfo.pDepthStencilState = nullptr;
         graphicPipelineCreateInfo.pColorBlendState = &colorBlendState;
         graphicPipelineCreateInfo.pDynamicState = nullptr;
         graphicPipelineCreateInfo.layout = xParams.xPipelineLayout;
@@ -358,10 +462,14 @@ namespace Xavier {
 
     bool XSampleA::prepareVertexInput()
     {
-        XVertexData xTriangleData[3] = {
-        { { 0.0f, 0.65f, 1.0f, }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        { { -0.45f, -0.3f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { 0.45f, -0.3f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        XVertexData xTriangleData[6] = {
+        { { 1.0f, 1.0f, 1.0f, }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { 1.0f, -1.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
+        { { -1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+
+        { { 1.0f, 1.0f, 1.0f, }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { { -1.0f, -1.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+        { { -1.0f, 1.0f, 1.0f }, { 1.0f, 1.0f, 0.0f, 1.0f } },
         };
 
         // Create Buffer Object.

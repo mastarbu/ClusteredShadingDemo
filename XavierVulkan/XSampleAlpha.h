@@ -10,6 +10,14 @@ namespace Xavier {
         XSampleA() : XRender() {}
         ~XSampleA() {}
 
+        struct CurrentFrameData {
+            size_t frameIndex;
+            size_t frameCount;
+            XVirtualFrameData *virtualFrameData;
+            XSwapchain *swapChain;
+            uint32_t swapChainImageIndex;
+        };
+
         virtual bool Draw();
         virtual bool prepareRenderSample();
 

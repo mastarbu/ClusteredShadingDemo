@@ -97,7 +97,6 @@ namespace Xavier {
 
         XBuffer xVertexBuffer;
 
-
 #if defined (_DEBUG)
         VkDebugReportCallbackEXT xReportCallback;
 #endif
@@ -109,6 +108,7 @@ namespace Xavier {
         VkSemaphore swapchainImageAvailableSemphore;
         VkSemaphore renderFinishedSemphore;
         VkCommandBuffer commandBuffer;
+        VkFramebuffer frameBuffer;
     };
 
     class XRender : public XRenderBase

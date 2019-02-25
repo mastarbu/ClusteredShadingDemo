@@ -30,12 +30,24 @@
     <ClCompile Include="XSampleAlpha.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="XSampleTeapot.h">
+      <Filter>Header Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XSampleTeapot.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="XavierBase.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Xavier.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XTexture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XModel.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="XSampleAlpha.h">

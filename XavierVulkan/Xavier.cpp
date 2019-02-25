@@ -82,10 +82,38 @@ namespace Xavier
         if (!createDevice()) { return false; }
         if (!createDeviceQueue()) { return false; }
         if (!createSwapChain()) { return false; }
-
+        
+        if (!createCommandPool()) { return false; }
+        if (!createCopyCommand()) { return false; }
         return true;
     }
 
+    bool XRender::createCommandPool()
+    {
+        VkCommandPoolCreateInfo cmdPoolCreateInfo = { VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+        cmdPoolCreateInfo.queueFamilyIndex = xParams.xGraphicFamilyQueueIndex;
+        cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        ZV_VK_CHECK(vkCreateCommandPool(xParams.xDevice, &cmdPoolCreateInfo, nullptr, &xParams.xRenderCmdPool));
+         
+        return true;
+    }
+
+    bool XRender::createCopyCommand()
+    {
+        VkCommandBufferAllocateInfo cpyCmdAllocInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+        cpyCmdAllocInfo.commandBufferCount = 1;
+        cpyCmdAllocInfo.pNext = nullptr;
+        cpyCmdAllocInfo.commandPool = xParams.xRenderCmdPool;
+        cpyCmdAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        ZV_VK_CHECK(vkAllocateCommandBuffers(xParams.xDevice, &cpyCmdAllocInfo, &xParams.xCopyCmd));
+
+        VkFenceCreateInfo cpyFenceCreateInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+        cpyFenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        cpyFenceCreateInfo.pNext = nullptr;
+        ZV_VK_CHECK(vkCreateFence(xParams.xDevice, &cpyFenceCreateInfo, nullptr, &xParams.xCopyFence));
+
+        return true;
+    }
     bool XRender::createInstance()
     {
         // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
@@ -491,6 +519,60 @@ namespace Xavier
             const char *ext = extensions[i].extensionName;
             if (strcmp(ext, targetExtension) == 0)
                 return true;
+        }
+        return false;
+    }
+
+    bool XRender::allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps)
+    {
+        VkMemoryRequirements memRequires;
+        vkGetBufferMemoryRequirements(xParams.xDevice, buffer, &memRequires);
+
+        VkPhysicalDeviceMemoryProperties phyiscalDeviceMemProp;
+        vkGetPhysicalDeviceMemoryProperties(xParams.xPhysicalDevice, &phyiscalDeviceMemProp);
+
+        // Look up all types of memory heap, and try to find one, whose type is required, from which the buffer will be allocated.
+        for (size_t i = 0; i < phyiscalDeviceMemProp.memoryTypeCount; ++i)
+        {
+
+            if (memRequires.memoryTypeBits & (1 << i) // make sure the type is what the buffer requires. 
+                && phyiscalDeviceMemProp.memoryTypes[i].propertyFlags & addtionProps) // make sure the memory with this type is visible to us.
+            {
+                VkMemoryAllocateInfo memAllocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+                memAllocInfo.pNext = nullptr;
+                memAllocInfo.allocationSize = memRequires.size;
+                memAllocInfo.memoryTypeIndex = i;
+
+                if (vkAllocateMemory(xParams.xDevice, &memAllocInfo, nullptr, memory) == VK_SUCCESS)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    bool XRender::allocateImageMemory(VkImage image, VkDeviceMemory *memory, VkMemoryPropertyFlags addtionProps)
+    {
+        VkMemoryRequirements memRequires;
+        vkGetImageMemoryRequirements(xParams.xDevice, image, &memRequires);
+
+        VkPhysicalDeviceMemoryProperties phyiscalDeviceMemProp;
+        vkGetPhysicalDeviceMemoryProperties(xParams.xPhysicalDevice, &phyiscalDeviceMemProp);
+
+        // Look up all types of memory heap, and try to find one, whose type is required, from which the buffer will be allocated.
+        for (size_t i = 0; i < phyiscalDeviceMemProp.memoryTypeCount; ++i)
+        {
+
+            if (memRequires.memoryTypeBits & (1 << i) // make sure the type is what the buffer requires. 
+                && phyiscalDeviceMemProp.memoryTypes[i].propertyFlags & addtionProps) // make sure the memory with this type is visible to us.
+            {
+                VkMemoryAllocateInfo memAllocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+                memAllocInfo.pNext = nullptr;
+                memAllocInfo.allocationSize = memRequires.size;
+                memAllocInfo.memoryTypeIndex = i;
+
+                if (vkAllocateMemory(xParams.xDevice, &memAllocInfo, nullptr, memory) == VK_SUCCESS)
+                    return true;
+            }
         }
         return false;
     }

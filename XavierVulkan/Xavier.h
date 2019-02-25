@@ -34,6 +34,19 @@ namespace Xavier {
             sampler(VK_NULL_HANDLE),
             memory(VK_NULL_HANDLE)
         {   }
+
+    };
+
+    struct BufferParameters
+    {
+        VkBuffer handle;
+        VkDeviceMemory memory;
+        uint32_t size;
+        BufferParameters() :
+            handle(VK_NULL_HANDLE),
+            memory(VK_NULL_HANDLE),
+            size(0u)
+        {   }
     };
 
     struct XSwapchain {
@@ -47,12 +60,6 @@ namespace Xavier {
             extent(),
             format(VK_FORMAT_UNDEFINED)
         { }
-    };
-
-    struct XBuffer {
-        VkBuffer handle;
-        VkDeviceMemory memory;
-        uint32_t size;
     };
 
     struct XVertexData {
@@ -88,6 +95,9 @@ namespace Xavier {
 
         VkCommandPool xRenderCmdPool;
         
+        VkCommandBuffer xCopyCmd;
+        VkFence xCopyFence;
+
         VkFramebuffer xFramebuffer;
 
         VkRenderPass xRenderPass;
@@ -95,7 +105,12 @@ namespace Xavier {
         VkPipeline xPipeline;
         VkPipelineLayout xPipelineLayout;
 
-        XBuffer xVertexBuffer;
+        BufferParameters xVertexBuffer;
+
+        BufferParameters xIndexBuffer;
+
+        VkDescriptorPool xDescriptorPool;
+        
 
 #if defined (_DEBUG)
         VkDebugReportCallbackEXT xReportCallback;
@@ -130,11 +145,15 @@ namespace Xavier {
         bool createDevice();
         bool createDeviceQueue();
         bool createSwapChain();
+        bool createCommandPool();
+        bool createCopyCommand();
 
         bool checkQueueFamilySupport(VkPhysicalDevice physicalDevice, uint32_t &graphicQueueFamilyIndex, uint32_t &presentQueueFamilyIndex);
         bool checkInstanceLayersSupport(const std::vector<VkLayerProperties> &layersProperties, const char *targetLayer);
         bool checkInstanceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
         bool checkPhysicalDeviceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
+
+        
         // helper functions.
         uint32_t xGetImagesCountForSwapchain(const VkSurfaceCapabilitiesKHR &surfaceCap)
         {
@@ -243,8 +262,20 @@ namespace Xavier {
             }
             return bytes;
         }
-       
-        
+
+        std::string m_getAssetPath()
+        {
+            return SAMPLE_DATA_DIR;
+        }
+
+        std::string m_getTexturePath()
+        {
+            return m_getAssetPath() + "/teapot/";
+        }
+
+        bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory *memory, VkMemoryPropertyFlags addtionProps);
+        bool allocateImageMemory(VkImage image, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
+
       protected:
         // 9 Attributes
         SDLWindowPara winParam;

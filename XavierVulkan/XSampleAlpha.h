@@ -27,9 +27,7 @@ namespace Xavier {
         bool prepareGraphicsPipeline();
         bool prepareVertexInput();
 
-        bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory *memory, VkMemoryPropertyFlags addtionProps);
         bool prepareFrameBuffer();
      
     };
-
 }  

@@ -101,14 +101,14 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;SAMPLE_NAME="samleAlpha";SAMPLE_NUMBER="00";%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VULKAN_SDK)\Third-Party\Include</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;SAMPLE_NAME="samleAlpha";SAMPLE_NUMBER="01";SAMPLE_DATA_DIR="C:/Users/ZavierBu/source/repos/XavierVulkan/XavierVulkan/Data";%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)../Third-Party/include;$(VULKAN_SDK)\Third-Party\Include</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>vulkan-1.lib;SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(VULKAN_SDK)\Third-Party\Bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>assimp-vc140-mt.lib;vulkan-1.lib;SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(ProjectDir)../Third-Party/bin;$(VULKAN_SDK)\Third-Party\Bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
@@ -158,12 +158,20 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Xavier.cpp" />
     <ClCompile Include="XavierBase.cpp" />
-    <ClCompile Include="XSampleAlpha.cpp" />
+    <ClCompile Include="XSampleAlpha.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClCompile>
+    <ClCompile Include="XSampleTeapot.cpp" />
+    <ClCompile Include="XSampleTeapot.h" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Xavier.h" />
     <ClInclude Include="XavierBase.h" />
-    <ClInclude Include="XSampleAlpha.h" />
+    <ClInclude Include="XModel.h" />
+    <ClInclude Include="XSampleAlpha.h">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </ClInclude>
+    <ClInclude Include="XTexture.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
@@ -175,6 +183,7 @@
     <LocalDebuggerEnvironment>PATH=$(VULKAN_SDK)\Third-Party\Bin
 $(LocalDebuggerEnvironment)</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
+    <ExecutablePath>$(VC_ExecutablePath_x64);$(WindowsSDK_ExecutablePath);$(VS_ExecutablePath);$(MSBuild_ExecutablePath);$(FxCopDir);$(PATH);</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=$(VULKAN_SDK)\Third-Party\Bin

@@ -94,7 +94,7 @@ namespace Xavier {
         XSwapchain xSwapchain;
 
         VkCommandPool xRenderCmdPool;
-        
+
         VkCommandBuffer xCopyCmd;
         VkFence xCopyFence;
 
@@ -124,6 +124,7 @@ namespace Xavier {
         VkSemaphore renderFinishedSemphore;
         VkCommandBuffer commandBuffer;
         VkFramebuffer frameBuffer;
+        ImageParameters depthImage;
     };
 
     class XRender : public XRenderBase
@@ -213,7 +214,7 @@ namespace Xavier {
         {
             for (VkPresentModeKHR mode : surfaceSupportPresentModes)
             {
-                if (mode & VK_PRESENT_MODE_MAILBOX_KHR)
+                if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
                 {
                     return mode;
                 }
@@ -221,7 +222,7 @@ namespace Xavier {
 
             for (VkPresentModeKHR mode : surfaceSupportPresentModes)
             {
-                if (mode & VK_PRESENT_MODE_IMMEDIATE_KHR)
+                if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
                 {
                     return mode;
                 }
@@ -229,7 +230,7 @@ namespace Xavier {
 
             for (VkPresentModeKHR mode : surfaceSupportPresentModes)
             {
-                if (mode & VK_PRESENT_MODE_FIFO_KHR)
+                if (mode == VK_PRESENT_MODE_FIFO_KHR)
                 {
                     return mode;
                 }

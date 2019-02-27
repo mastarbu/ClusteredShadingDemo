@@ -22,6 +22,7 @@
     <ProjectGuid>{5A4234BA-9B20-4CD4-B9F0-D7BC800EDB93}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>XavierVulkan</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -103,9 +104,11 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;SAMPLE_NAME="samleAlpha";SAMPLE_NUMBER="01";SAMPLE_DATA_DIR="C:/Users/ZavierBu/source/repos/XavierVulkan/XavierVulkan/Data";%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(ProjectDir)../Third-Party/include;$(VULKAN_SDK)\Third-Party\Include</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <SupportJustMyCode>false</SupportJustMyCode>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>assimp-vc140-mt.lib;vulkan-1.lib;SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(ProjectDir)../Third-Party/bin;$(VULKAN_SDK)\Third-Party\Bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
@@ -161,7 +164,9 @@
     <ClCompile Include="XSampleAlpha.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="XSampleTeapot.cpp" />
+    <ClCompile Include="XSampleTeapot.cpp">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="XSampleTeapot.h" />
   </ItemGroup>
   <ItemGroup>
@@ -169,7 +174,7 @@
     <ClInclude Include="XavierBase.h" />
     <ClInclude Include="XModel.h" />
     <ClInclude Include="XSampleAlpha.h">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClInclude>
     <ClInclude Include="XTexture.h" />
   </ItemGroup>
@@ -184,6 +189,7 @@
 $(LocalDebuggerEnvironment)</LocalDebuggerEnvironment>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <ExecutablePath>$(VC_ExecutablePath_x64);$(WindowsSDK_ExecutablePath);$(VS_ExecutablePath);$(MSBuild_ExecutablePath);$(FxCopDir);$(PATH);</ExecutablePath>
+    <TargetName>XavierVulkan</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerEnvironment>PATH=$(VULKAN_SDK)\Third-Party\Bin

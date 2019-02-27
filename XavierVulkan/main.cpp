@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include "XavierBase.h"
- // #include "XSampleAlpha.h"
+// #include "XSampleAlpha.h"
 #include "XSampleTeapot.h"
 
 int main()

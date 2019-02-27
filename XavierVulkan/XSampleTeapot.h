@@ -71,9 +71,9 @@ namespace Xavier {
 
         bool prepareDescriptorSetLayout();
 
-        bool createDepthBuffer();
+        bool createDepthBuffer(ImageParameters &depthImage);
 
-        bool prepareFrameBuffer(const std::vector<VkImageView> &view);
-        bool buildCommandBuffer();
+        bool prepareFrameBuffer(std::vector<VkImageView> & view, VkFramebuffer & framebuffer);
+        bool buildCommandBuffer(VkCommandBuffer & xRenderCmdBuffer, VkFramebuffer &currentFrameBuffer);
     };
 }

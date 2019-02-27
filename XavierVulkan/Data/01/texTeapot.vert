@@ -24,4 +24,5 @@ void main()
     f_norm = norm;
     f_uv = uv;
     gl_Position = ubo.MVP * vec4(pos.xyz, 1.0); 
+
 }

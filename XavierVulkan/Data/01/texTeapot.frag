@@ -27,6 +27,7 @@ void main()
     vec3 L = normalize(vec3(ubo.lightPos.xyz) - f_pos);
     vec3 N = normalize(f_norm);
     vec3 H = normalize(V + L);
-    vec3 color = (material.kD * texture(diffuseTex, f_uv) * dot(N, L) + material.kS * pow(dot(N, H), 10)).rgb;
+    //vec3 color = (material.kD * texture(diffuseTex, f_uv) * dot(N, L) + material.kS * pow(dot(N, H), 10)).rgb;
+    vec3 color = texture(diffuseTex, f_uv).xyz;
     o_color = vec4(color.rgb, 1.0);
 }

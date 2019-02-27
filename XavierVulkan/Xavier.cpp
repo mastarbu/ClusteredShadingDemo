@@ -179,8 +179,8 @@ namespace Xavier
         appInfo.pApplicationName = "Zavi's Demo";
         appInfo.applicationVersion = 1;
         appInfo.pEngineName = "LunarG SDK";
-        appInfo.engineVersion = 1;
-        appInfo.apiVersion = VK_MAKE_VERSION(1, 1, VK_HEADER_VERSION);
+        appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+        appInfo.apiVersion = VK_MAKE_VERSION(1, 0, 0);
 
         // VkInstanceCreateInfo is where the programmer specifies the layers and/or extensions that
         // are needed.

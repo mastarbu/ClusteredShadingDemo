@@ -21,6 +21,8 @@ namespace Xavier {
 
         uint32_t indexBase;
 
+        uint32_t vertexCount;
+
         uint32_t indexCount;
     };
 }

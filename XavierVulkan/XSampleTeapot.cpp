@@ -10,13 +10,74 @@
 
 bool Xavier::XSampleTeapot::Draw()
 {
-    return false;
+    // Initialization for the CurrentFrameData.
+    static CurrentFrameData currentFrameData = {
+        0,
+        xVirtualFrames.size(),
+        &xVirtualFrames[0],
+        &xParams.xSwapchain,
+        0,
+    };
+
+    //Move the index Forward by 1.
+    currentFrameData.frameIndex = (currentFrameData.frameIndex + 1) % currentFrameData.frameCount;
+    currentFrameData.virtualFrameData = &xVirtualFrames.at(currentFrameData.frameIndex);
+
+    vkWaitForFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence, VK_TRUE, 2000000000ll);
+
+    // Reset the fence
+    vkResetFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence);
+    // Acquire Image.
+    VkResult rst = vkAcquireNextImageKHR(xParams.xDevice, xParams.xSwapchain.handle, 200, currentFrameData.virtualFrameData->swapchainImageAvailableSemphore, VkFence(), &currentFrameData.swapChainImageIndex);
+
+    std::cout << "rst:" << rst << std::endl;
+    // Create FrameBuffer
+
+    if (currentFrameData.virtualFrameData->frameBuffer != VK_NULL_HANDLE)
+        vkDestroyFramebuffer(xParams.xDevice, currentFrameData.virtualFrameData->frameBuffer, nullptr);
+
+
+    std::vector<VkImageView> attachments = { xParams.xSwapchain.images[currentFrameData.swapChainImageIndex].view,
+        currentFrameData.virtualFrameData->depthImage.view };
+
+    prepareFrameBuffer(attachments, currentFrameData.virtualFrameData->frameBuffer);
+
+    // Begin to record command buffer.  
+    ZV_VK_VALIDATE(buildCommandBuffer(currentFrameData.virtualFrameData->commandBuffer, currentFrameData.virtualFrameData->frameBuffer), "something goes wrong when building command buufer !");
+   
+
+    // Submit the command buffer.
+    VkPipelineStageFlags waitDstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
+    submitInfo.pNext = nullptr;
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = &currentFrameData.virtualFrameData->swapchainImageAvailableSemphore;
+    submitInfo.pWaitDstStageMask = &waitDstStageMask;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &currentFrameData.virtualFrameData->commandBuffer;
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &currentFrameData.virtualFrameData->renderFinishedSemphore;
+    vkQueueSubmit(xParams.xGraphicQueue, 1, &submitInfo, currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence);
+
+    // Present the image.
+    VkResult presentResult;
+    VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
+    presentInfo.pNext = nullptr;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = &currentFrameData.virtualFrameData->renderFinishedSemphore;
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = &xParams.xSwapchain.handle;
+    presentInfo.pImageIndices = &currentFrameData.swapChainImageIndex;
+    presentInfo.pResults = &presentResult;
+    ZV_VK_CHECK(vkQueuePresentKHR(xParams.xPresentQueue, &presentInfo));
+
+    return true;
 }
 
 bool Xavier::XSampleTeapot::prepareRenderSample()
 {
     ZV_VK_VALIDATE(prepareDescriptorSetLayout(), "Prepare descriptorset layout failed !");
-    ZV_VK_VALIDATE(createDepthBuffer(), "Creating Depth buffer failed !");
     ZV_VK_VALIDATE(prepareRenderPasses(), "something goes wrong when preparing renderpass");
 
     ZV_VK_VALIDATE(loadAsserts(), "something goes wrong when loading assets !");
@@ -139,13 +200,14 @@ bool Xavier::XSampleTeapot::loadAsserts()
         vkQueueSubmit(xParams.xGraphicQueue, 1, &submit, xParams.xCopyFence);
 
         // Create Index buffer.
+        xParams.xIndexBuffer.size = xParamsTeapot.indices.size() * sizeof(uint32_t);
         VkBufferCreateInfo indexBufCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };;
         indexBufCreateInfo.flags = 0;
         indexBufCreateInfo.pNext = nullptr;
         indexBufCreateInfo.queueFamilyIndexCount = 0;
         indexBufCreateInfo.pQueueFamilyIndices = nullptr;
         indexBufCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-        indexBufCreateInfo.size = xParamsTeapot.vertices.size() * sizeof(uint32_t);
+        indexBufCreateInfo.size = xParams.xIndexBuffer.size;
         indexBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &indexBufCreateInfo, nullptr, &xParams.xIndexBuffer.handle));
 
@@ -155,7 +217,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
 
         // Create Staging buffer for index buffer.
         BufferParameters indexStageBuffer;
-        indexStageBuffer.size = xParamsTeapot.vertices.size() * sizeof(uint32_t);
+        indexStageBuffer.size = xParams.xIndexBuffer.size;
         VkBufferCreateInfo indexStageBufCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };;
         indexStageBufCreateInfo.flags = 0;
         indexStageBufCreateInfo.pNext = nullptr;
@@ -379,6 +441,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
             ZV_VK_CHECK(vkResetFences(xParams.xDevice, 1, &fence));
             ZV_VK_CHECK(vkQueueSubmit(xParams.xGraphicQueue, 1, &submit, fence));
             ZV_VK_CHECK(vkWaitForFences(xParams.xDevice, 1, &fence, VK_TRUE, 1000000000ull));
+            ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
             vkDestroyFence(xParams.xDevice, fence, nullptr);
             vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
             vkFreeCommandBuffers(xParams.xDevice, xParams.xRenderCmdPool, 1, &copyCmd);
@@ -640,6 +703,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         ZV_VK_CHECK(vkResetFences(xParams.xDevice, 1, &fence));
         ZV_VK_CHECK(vkQueueSubmit(xParams.xGraphicQueue, 1, &submit, fence));
         ZV_VK_CHECK(vkWaitForFences(xParams.xDevice, 1, &fence, VK_TRUE, 1000000000ull));
+        ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
         vkDestroyFence(xParams.xDevice, fence, nullptr);
         vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
         vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
@@ -703,7 +767,7 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
     uint32_t numFace = mesh->mNumFaces;
     for (uint32_t i = 0; i < numFace; ++i)
     {
-        aiFace *face = mesh->mFaces;
+        aiFace *face = &mesh->mFaces[i];
         if (face->mNumIndices != 3)
         {
             std::cout << "Face: " << i << "Not a triangle !" << std::endl;
@@ -717,19 +781,20 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
 
     // Record Vertex
     uint32_t numVertex = mesh->mNumVertices;
+
     for (uint32_t i = 0; i < numVertex; ++i)
     {
         XVertex vert;
 
         vert.pos.r = mesh->mVertices[i].x;
-        vert.pos.g = mesh->mVertices[i].y;
+        vert.pos.g = - mesh->mVertices[i].y;
         vert.pos.b = mesh->mVertices[i].z;
 
         vert.uv.r = mesh->mNormals[i].x;
         vert.uv.g = mesh->mNormals[i].y;
 
         vert.norm.r = mesh->mNormals[i].x;
-        vert.norm.g = mesh->mNormals[i].y;
+        vert.norm.g = - mesh->mNormals[i].y;
         vert.norm.b = mesh->mNormals[i].z;
 
         xParamsTeapot.vertices.push_back(std::move(vert));
@@ -737,10 +802,12 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
 
 
     // update indexBase in Vertex Buffer
+    xMesh.vertexCount = numVertex;
     xMesh.indexBase = indexBase;
     xMesh.indexCount = 3 * numFace;
     indexBase += xMesh.indexCount;
 
+    xMesh.materialIndex = mesh->mMaterialIndex;
     xParamsTeapot.Meshes.push_back(xMesh);
 
     // Material 
@@ -794,7 +861,7 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
     } cameraAndLights;
     // calculate the data;
     glm::mat4 id;
-    glm::mat4 model = glm::scale(id, glm::vec3{ 0.1f, 0.1f, 0.1f });
+    glm::mat4 model = glm::translate(id, glm::vec3{0.0f, 3.5f, 0.0f}) * glm::scale(id, glm::vec3{ 0.1f, 0.1f, 0.1f });
     glm::mat4 proj = glm::perspective(glm::radians(60.0f), (float)xParams.xSwapchain.extent.width / (float)xParams.xSwapchain.extent.height, 0.1f, 100.0f);
     glm::mat4 view = glm::lookAt(glm::vec3{ 0.0f, 0.0f, 10.0f }, glm::vec3{ 0.0f,0.0f,0.0f }, glm::vec3{ 0.0f, 1.0f, 0.0f });
 
@@ -969,6 +1036,8 @@ bool Xavier::XSampleTeapot::prepareVirutalFrames()
         cmdbufAllocateInfo.commandPool = xParams.xRenderCmdPool;
 
         ZV_VK_CHECK(vkAllocateCommandBuffers(xParams.xDevice, &cmdbufAllocateInfo, &xVirtualFrames[i].commandBuffer));
+
+        ZV_VK_VALIDATE(createDepthBuffer(xVirtualFrames[i].depthImage), "something goes wrong when create Depth buffer");
     }
     return true;
 }
@@ -978,13 +1047,13 @@ bool Xavier::XSampleTeapot::prepareRenderPasses()
     // Remember we shall take the depth attachment into consideration.
     VkAttachmentDescription attachments[2] = {};
     attachments[0].flags = 0;
-    attachments[0].format = VK_FORMAT_R8G8B8A8_SNORM;
+    attachments[0].format = xParams.xSwapchain.format;
     attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     attachments[1].flags = 0;
@@ -992,9 +1061,9 @@ bool Xavier::XSampleTeapot::prepareRenderPasses()
     attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
     attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     VkSubpassDependency subpassDependencies[2] = {};
@@ -1066,9 +1135,9 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
     layouts[1] = xParamsTeapot.xTexDescSetLayout;
     ZV_VK_CHECK(vkCreatePipelineLayout(xParams.xDevice, &pipelineLayoutCreateInfo, nullptr, &xParamsTeapot.xTexPipelineLayout));
 
-    // Create pipeline for non-tex teapot
-    layouts[1] = xParamsTeapot.xBoldDescSetLayout;
-    ZV_VK_CHECK(vkCreatePipelineLayout(xParams.xDevice, &pipelineLayoutCreateInfo, nullptr, &xParamsTeapot.xBoldPipelineLayout));
+    //// Create pipeline for non-tex teapot
+    //layouts[1] = xParamsTeapot.xBoldDescSetLayout;
+    //ZV_VK_CHECK(vkCreatePipelineLayout(xParams.xDevice, &pipelineLayoutCreateInfo, nullptr, &xParamsTeapot.xBoldPipelineLayout));
 
     /// Pipeline Shader stages
     VkPipelineShaderStageCreateInfo shaderStages[4] = {};
@@ -1332,9 +1401,9 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
     graphicPipelineCreateInfo.pStages = &shaderStages[0];
     ZV_VK_CHECK(vkCreateGraphicsPipelines(xParams.xDevice, VK_NULL_HANDLE, 1, &graphicPipelineCreateInfo, nullptr, &xParamsTeapot.xTexPipeline));
 
-    graphicPipelineCreateInfo.layout = xParamsTeapot.xBoldPipelineLayout;
+    /*graphicPipelineCreateInfo.layout = xParamsTeapot.xBoldPipelineLayout;
     graphicPipelineCreateInfo.pStages = &shaderStages[2];
-    ZV_VK_CHECK(vkCreateGraphicsPipelines(xParams.xDevice, VK_NULL_HANDLE, 1, &graphicPipelineCreateInfo, nullptr, &xParamsTeapot.xBoldPipeline));
+    ZV_VK_CHECK(vkCreateGraphicsPipelines(xParams.xDevice, VK_NULL_HANDLE, 1, &graphicPipelineCreateInfo, nullptr, &xParamsTeapot.xBoldPipeline));*/
 
     return true;
 }
@@ -1375,7 +1444,7 @@ bool Xavier::XSampleTeapot::prepareDescriptorSetLayout()
     return true;
 }
 
-bool Xavier::XSampleTeapot::createDepthBuffer()
+bool Xavier::XSampleTeapot::createDepthBuffer(Xavier::ImageParameters &depthImage)
 {
     VkImageCreateInfo depthCreateInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
     depthCreateInfo.pNext = nullptr;
@@ -1393,49 +1462,101 @@ bool Xavier::XSampleTeapot::createDepthBuffer()
     depthCreateInfo.pQueueFamilyIndices = nullptr;
     depthCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-    ZV_VK_CHECK(vkCreateImage(xParams.xDevice, &depthCreateInfo, nullptr, &xParamsTeapot.depth.handle));
+    ZV_VK_CHECK(vkCreateImage(xParams.xDevice, &depthCreateInfo, nullptr, &depthImage.handle));
 
-    ZV_VK_VALIDATE(allocateImageMemory(xParamsTeapot.depth.handle, &xParamsTeapot.depth.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "MEMORY ALLOCATION FOR DEPTH BUFFER FAILED !");
+    ZV_VK_VALIDATE(allocateImageMemory(depthImage.handle, &depthImage.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "MEMORY ALLOCATION FOR DEPTH BUFFER FAILED !");
     
-    ZV_VK_CHECK(vkBindImageMemory(xParams.xDevice, xParamsTeapot.depth.handle, xParamsTeapot.depth.memory, 0));
+    ZV_VK_CHECK(vkBindImageMemory(xParams.xDevice, depthImage.handle, depthImage.memory, 0));
 
     // Create Image view
     VkImageViewCreateInfo depthImageViewCreateInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
     depthImageViewCreateInfo.pNext = nullptr;
     depthImageViewCreateInfo.flags = 0;
-    depthImageViewCreateInfo.image = xParamsTeapot.depth.handle;
+    depthImageViewCreateInfo.image = depthImage.handle;
     depthImageViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     depthImageViewCreateInfo.format = VK_FORMAT_D16_UNORM;
     /*depthImageViewCreateInfo.components;*/
-    depthImageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT,0,1,0,1 };
+    depthImageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
 
-    ZV_VK_CHECK(vkCreateImageView(xParams.xDevice, &depthImageViewCreateInfo, nullptr, &xParamsTeapot.depth.view))
+    ZV_VK_CHECK(vkCreateImageView(xParams.xDevice, &depthImageViewCreateInfo, nullptr, &depthImage.view))
 
     return true;
 }
 
-bool Xavier::XSampleTeapot::prepareFrameBuffer(const std::vector<VkImageView> &view)
+bool Xavier::XSampleTeapot::prepareFrameBuffer(std::vector<VkImageView> & view, VkFramebuffer & framebuffer)
 {
-    // Create Image for depth-stencil buffer and create framebuffer including it.
-    VkFramebufferCreateInfo frameBufferCreateInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
-    frameBufferCreateInfo.pNext = nullptr;
-    frameBufferCreateInfo.flags = 0;
-    frameBufferCreateInfo.renderPass = xParams.xRenderPass;
-    frameBufferCreateInfo.attachmentCount = view.size();
-    frameBufferCreateInfo.pAttachments = view.data();
-    frameBufferCreateInfo.width = xParams.xSwapchain.extent.width;
-    frameBufferCreateInfo.height = xParams.xSwapchain.extent.height;
-    frameBufferCreateInfo.layers = 1;
-    ZV_VK_CHECK(vkCreateFramebuffer(xParams.xDevice, &frameBufferCreateInfo, nullptr, &xParams.xFramebuffer));
-
+    VkFramebufferCreateInfo framebufferCreateInfo = { VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO };
+    framebufferCreateInfo.pNext = nullptr;
+    framebufferCreateInfo.flags = 0;
+    framebufferCreateInfo.renderPass = xParams.xRenderPass;
+    framebufferCreateInfo.attachmentCount = 2;
+    framebufferCreateInfo.pAttachments = view.data();
+    framebufferCreateInfo.width = xParams.xSwapchain.extent.width;
+    framebufferCreateInfo.height = xParams.xSwapchain.extent.height;
+    framebufferCreateInfo.layers = 1;
+    ZV_VK_CHECK(vkCreateFramebuffer(xParams.xDevice, &framebufferCreateInfo, nullptr, &framebuffer));
     return true;
 }
 
-bool Xavier::XSampleTeapot::buildCommandBuffer()
+bool Xavier::XSampleTeapot::buildCommandBuffer(VkCommandBuffer &xRenderCmdBuffer, VkFramebuffer &currentFrameBuffer)
 {
     // Command buffer begin
-    // Mesh 0: Bind the descriptor set for material of Mesh 0; get the index base and index count of Mesh 0; Draw;
-    // Mesh 1: Bind the descriptor set for material of Mesh 1; get the index base and index count of Mesh 1; Draw;
-    return false;
-}
+    VkCommandBufferBeginInfo cmdBufBeginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    cmdBufBeginInfo.pNext = nullptr;
+    cmdBufBeginInfo.pInheritanceInfo = nullptr;
+    
+    ZV_VK_CHECK(vkBeginCommandBuffer(xRenderCmdBuffer, &cmdBufBeginInfo));
 
+    std::vector<float> colorClearValue = { 0.2f, 0.2f, 0.2f, 0.0f };
+    std::vector<float> depthClearValue = { 1.0f , 0};
+    VkClearValue clearColor[2] = {};
+    memcpy(&clearColor[0].color.float32[0], colorClearValue.data(), sizeof(float) * colorClearValue.size());
+    memcpy(&clearColor[1].depthStencil.depth, depthClearValue.data(), sizeof(float) * depthClearValue.size());
+
+    VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
+    renderPassBeginInfo.pNext = nullptr;
+    renderPassBeginInfo.renderPass = xParams.xRenderPass;
+    renderPassBeginInfo.framebuffer = currentFrameBuffer;
+    renderPassBeginInfo.renderArea = { { 0, 0 }, { xParams.xSwapchain.extent.width, xParams.xSwapchain.extent.height } };
+    renderPassBeginInfo.clearValueCount = 2;
+    renderPassBeginInfo.pClearValues = &clearColor[0];
+
+    std::vector<VkDescriptorSet> descSets[2];
+    descSets[0].push_back(xParamsTeapot.commonSet);
+    descSets[1].push_back(xParamsTeapot.commonSet);
+
+    descSets[0].push_back(xParamsTeapot.materials[0].texDiffuse? xParamsTeapot.materials[0].descriptorSet: xParamsTeapot.materials[1].descriptorSet);
+    descSets[1].push_back(xParamsTeapot.materials[0].texDiffuse? xParamsTeapot.materials[1].descriptorSet: xParamsTeapot.materials[0].descriptorSet);
+    vkCmdBeginRenderPass(xRenderCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    
+    uint32_t vertexOffset = 0;
+    for (uint32_t i = 0; i < xParamsTeapot.Meshes.size(); ++i)
+    {
+
+        uint32_t matIndex = xParamsTeapot.Meshes[i].materialIndex;
+        if (xParamsTeapot.materials[matIndex].texDiffuse != nullptr)
+        {
+            vkCmdBindPipeline(xRenderCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, xParamsTeapot.xTexPipeline);
+            vkCmdBindDescriptorSets(xRenderCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, xParamsTeapot.xTexPipelineLayout,
+                0, 2, descSets[0].data(), 0, nullptr);
+        }
+        else
+        {
+            vkCmdBindPipeline(xRenderCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, xParamsTeapot.xBoldPipeline);
+            vkCmdBindDescriptorSets(xRenderCmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, xParamsTeapot.xBoldPipelineLayout,
+                0, 2, descSets[1].data(), 0, nullptr);
+        }
+
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(xRenderCmdBuffer, 0, 1, &xParams.xVertexBuffer.handle, &offset);
+        vkCmdBindIndexBuffer(xRenderCmdBuffer, xParams.xIndexBuffer.handle, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(xRenderCmdBuffer, xParamsTeapot.Meshes[i].indexCount, 1, xParamsTeapot.Meshes[i].indexBase, vertexOffset, 0);
+        // vkCmdDraw(xRenderCmdBuffer, 3, 1, 0, 0);
+        vertexOffset += xParamsTeapot.Meshes[i].vertexCount;
+    }
+    vkCmdEndRenderPass(xRenderCmdBuffer);
+
+    vkEndCommandBuffer(xRenderCmdBuffer);
+    return true;
+}

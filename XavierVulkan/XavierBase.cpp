@@ -64,7 +64,7 @@ namespace Xavier {
           break;
       }
       // std::cout << "zavi";
-       SDL_Delay(10);
+      // SDL_Delay(10);
     }
     return rst;
   }

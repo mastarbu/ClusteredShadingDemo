@@ -12,8 +12,6 @@ namespace Xavier {
         XSampleTeapot() : XRender() {}
         ~XSampleTeapot() {}
 
-
-
         struct XMaterialTeapot {
             XTexture *texDiffuse;
             XMaterialProperties matProps;
@@ -42,7 +40,6 @@ namespace Xavier {
             VkDescriptorSetLayout commonSetLayout;
             VkDescriptorSet commonSet;
             BufferParameters commonUniform;
-
 
             std::map<std::string, XTexture> xTextureLib;
         } xParamsTeapot;

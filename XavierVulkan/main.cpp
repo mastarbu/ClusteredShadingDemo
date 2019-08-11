@@ -3,7 +3,8 @@
 #include <iostream>
 #include "XavierBase.h"
 // #include "XSampleAlpha.h"
-#include "XSampleTeapot.h"
+// #include "XSampleTeapot.h"
+#include "XSampleSponza.h"
 
 int main()
 {
@@ -14,7 +15,7 @@ int main()
         return -1;
     }
 
-    Xavier::XSampleTeapot sampleAlpha;
+    Xavier::XSampleSponza sampleAlpha;
     if (sampleAlpha.Prepare(window))
         window.renderLoop(sampleAlpha);
     else

@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
@@ -23,16 +24,15 @@ bool Xavier::XSampleTeapot::Draw()
     currentFrameData.frameIndex = (currentFrameData.frameIndex + 1) % currentFrameData.frameCount;
     currentFrameData.virtualFrameData = &xVirtualFrames.at(currentFrameData.frameIndex);
 
-    vkWaitForFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence, VK_TRUE, 2000000000ll);
-
-    // Reset the fence
-    vkResetFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence);
     // Acquire Image.
     VkResult rst = vkAcquireNextImageKHR(xParams.xDevice, xParams.xSwapchain.handle, 200, currentFrameData.virtualFrameData->swapchainImageAvailableSemphore, VkFence(), &currentFrameData.swapChainImageIndex);
 
-    std::cout << "rst:" << rst << std::endl;
-    // Create FrameBuffer
+    vkWaitForFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence, VK_TRUE, 1000000000ll);
 
+    // Reset the fence
+    vkResetFences(xParams.xDevice, 1, &currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence);
+
+    // Create FrameBuffer
     if (currentFrameData.virtualFrameData->frameBuffer != VK_NULL_HANDLE)
         vkDestroyFramebuffer(xParams.xDevice, currentFrameData.virtualFrameData->frameBuffer, nullptr);
 
@@ -529,7 +529,6 @@ bool Xavier::XSampleTeapot::loadAsserts()
     return true;
 }
 
-
 bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const std::string &dir, Xavier::XTexture *&xTex)
 {
     if (!xTex)
@@ -555,7 +554,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         //We want to always get RGBA format data from reading the 
         const unsigned char* imageData = stbi_load(path.c_str(), &width, &height, &channels, 4);
 
-        if (!imageData)
+        if (!imageData || width == 0 || height == 0)
         {
             std::cout << "Image file reading failed !" << std::endl;
             return false;
@@ -572,7 +571,8 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         }
 
         xTex->format = VK_FORMAT_R8G8B8A8_UNORM;
-
+        xTex->mipmapLevels = std::log2f((float)std::min(width, height));
+        
         // Create Staging Buffer.
         BufferParameters stageBuffer;
             
@@ -604,9 +604,6 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         memRange.size = stageBuffer.size;
         ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &memRange));
 
-        VkImageFormatProperties props;
-        VkResult rst = vkGetPhysicalDeviceImageFormatProperties(xParams.xPhysicalDevice, xTex->format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 0, &props);
-
         // Create texture vkImage
         VkImageCreateInfo imgCreateInfo = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
         imgCreateInfo.pNext = nullptr;
@@ -614,11 +611,11 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         imgCreateInfo.imageType = VK_IMAGE_TYPE_2D;
         imgCreateInfo.format = xTex->format;
         imgCreateInfo.extent = { (uint32_t)width, (uint32_t)height, 1u };
-        imgCreateInfo.mipLevels = 1;
+        imgCreateInfo.mipLevels = xTex->mipmapLevels;
         imgCreateInfo.arrayLayers = 1;
         imgCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imgCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imgCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imgCreateInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
         imgCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imgCreateInfo.queueFamilyIndexCount = 1;
         imgCreateInfo.pQueueFamilyIndices = &xParams.xGraphicFamilyQueueIndex;
@@ -630,6 +627,8 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         ZV_VK_VALIDATE(allocateImageMemory(xTex->handle, &xTex->memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "MEMORY ALLOCATION FOR THE IMAGE FAILED !");
         
         ZV_VK_CHECK(vkBindImageMemory(xParams.xDevice, xTex->handle, xTex->memory, 0));
+
+
 
         VkCommandBuffer copyCmd;
 
@@ -672,15 +671,66 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         VkImageMemoryBarrier imgMemBarrier2 = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         imgMemBarrier2.pNext = nullptr;
         imgMemBarrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imgMemBarrier2.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        imgMemBarrier2.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         imgMemBarrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        imgMemBarrier2.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imgMemBarrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         imgMemBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imgMemBarrier2.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         imgMemBarrier2.image = xTex->handle;
         imgMemBarrier2.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-        vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &imgMemBarrier2);
+
+        // Generate Mipmap
+        for (uint32_t i = 1; i < xTex->mipmapLevels; i++)
+        {
+            VkImageMemoryBarrier nextLevelLayoutTransferDst = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            nextLevelLayoutTransferDst.pNext = nullptr;
+            nextLevelLayoutTransferDst.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            nextLevelLayoutTransferDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            nextLevelLayoutTransferDst.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            nextLevelLayoutTransferDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            nextLevelLayoutTransferDst.image = xTex->handle;
+            nextLevelLayoutTransferDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 };
+            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferDst);
+            
+            VkImageBlit imgBlit = { };
+            imgBlit.srcOffsets[0] = { 0, 0, 0 };
+            imgBlit.srcOffsets[1] = { width >> (i - 1), height >> (i - 1), 1};
+            imgBlit.dstOffsets[0] = { 0, 0, 0 };
+            imgBlit.dstOffsets[1] = { width >> (i), height >> (i), 1 };
+            imgBlit.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, i - 1, 0, 1 };
+            imgBlit.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, i, 0, 1 };
+
+            vkCmdBlitImage(copyCmd, xTex->handle, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, xTex->handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &imgBlit, VK_FILTER_LINEAR);
+
+            VkImageMemoryBarrier nextLevelLayoutTransferSrc = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            nextLevelLayoutTransferSrc.pNext = nullptr;
+            nextLevelLayoutTransferSrc.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferSrc.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            nextLevelLayoutTransferSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            nextLevelLayoutTransferSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            nextLevelLayoutTransferSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            nextLevelLayoutTransferSrc.image = xTex->handle;
+            nextLevelLayoutTransferSrc.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 };
+            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferSrc);
+        }
+        
+        // After generation for mipmap, we shall set the whole image layout for shader reading.
+        VkImageMemoryBarrier wholeImageLayoutShaderReading = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+        wholeImageLayoutShaderReading.pNext = nullptr;
+        wholeImageLayoutShaderReading.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        wholeImageLayoutShaderReading.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        wholeImageLayoutShaderReading.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        wholeImageLayoutShaderReading.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        wholeImageLayoutShaderReading.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        wholeImageLayoutShaderReading.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        wholeImageLayoutShaderReading.image = xTex->handle;
+        wholeImageLayoutShaderReading.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, xTex->mipmapLevels, 0, 1 };
+        vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &wholeImageLayoutShaderReading);
 
         ZV_VK_CHECK(vkEndCommandBuffer(copyCmd));
 
@@ -708,16 +758,17 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
         vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
         vkFreeCommandBuffers(xParams.xDevice, xParams.xRenderCmdPool, 1, &copyCmd);
+
         // Create Sampler for the texture
         VkSamplerCreateInfo smlCreateInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
         smlCreateInfo.flags = 0;
         smlCreateInfo.pNext = nullptr;
-        smlCreateInfo.magFilter = VK_FILTER_LINEAR;
-        smlCreateInfo.minFilter = VK_FILTER_LINEAR;
+        smlCreateInfo.magFilter = VK_FILTER_NEAREST;
+        smlCreateInfo.minFilter = VK_FILTER_NEAREST;
         smlCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        smlCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        smlCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-        smlCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        smlCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        smlCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        smlCreateInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 
         // Close all the additional features, and handle them someday later 
         // [TODO]
@@ -726,8 +777,8 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         smlCreateInfo.maxAnisotropy = 1.0F;
         smlCreateInfo.compareEnable = VK_FALSE;
         smlCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-        smlCreateInfo.minLod = 0.0f;
-        smlCreateInfo.maxLod = 0.0f;
+        smlCreateInfo.minLod = 4.0f;
+        smlCreateInfo.maxLod = 4.0f;
         smlCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
         smlCreateInfo.unnormalizedCoordinates = VK_FALSE;
         ZV_VK_CHECK(vkCreateSampler(xParams.xDevice, &smlCreateInfo, nullptr, &xTex->sampler));
@@ -740,7 +791,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         imgViewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         imgViewCreateInfo.format = xTex->format;
         imgViewCreateInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
-        imgViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+        imgViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, xTex->mipmapLevels, 0, 1 };
         ZV_VK_CHECK(vkCreateImageView(xParams.xDevice, &imgViewCreateInfo, nullptr, &xTex->view));
 
     }
@@ -780,6 +831,13 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
     }
 
     // Record Vertex
+    // Ensure that the component of UV Components is 2
+    if (mesh->mNumUVComponents[0] != 2)
+    {
+        std::cout << "The component of UV Components is not 2 !" << std::endl;
+        return false;
+    }
+
     uint32_t numVertex = mesh->mNumVertices;
 
     for (uint32_t i = 0; i < numVertex; ++i)
@@ -790,8 +848,8 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
         vert.pos.g = - mesh->mVertices[i].y;
         vert.pos.b = mesh->mVertices[i].z;
 
-        vert.uv.r = mesh->mNormals[i].x;
-        vert.uv.g = mesh->mNormals[i].y;
+        vert.uv.r = mesh->mTextureCoords[0][i].x;
+        vert.uv.g = 1.0f - mesh->mTextureCoords[0][i].y;
 
         vert.norm.r = mesh->mNormals[i].x;
         vert.norm.g = - mesh->mNormals[i].y;
@@ -1015,7 +1073,7 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
 
 bool Xavier::XSampleTeapot::prepareVirutalFrames()
 {
-    xVirtualFrames.resize(3);
+    xVirtualFrames.resize(10);
 
     // Create Virtual Frame including:
     // 2 semaphores, 1 fence and 1 command buffer
@@ -1069,7 +1127,7 @@ bool Xavier::XSampleTeapot::prepareRenderPasses()
     VkSubpassDependency subpassDependencies[2] = {};
     subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
     subpassDependencies[0].dstSubpass = 0;
-    subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
     subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     subpassDependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -1335,7 +1393,7 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
     // depthWriteEnable decides whether the depth value needs to be replaced with the new value when it pass the depth test.
     depthStencilState.depthWriteEnable = VK_TRUE;
     depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-
+    
     /*
         The depth-bounds test is a special, additional test that can be performed as part of depth testing. The
         value stored in the depth buffer for the current fragment is compared with a specified range of values

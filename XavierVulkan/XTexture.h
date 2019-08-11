@@ -8,6 +8,7 @@ namespace Xavier {
     struct XTexture
     {
         VkFormat format;
+        uint32_t mipmapLevels;
         VkImage handle;
         VkDeviceMemory memory;
         VkImageView view;

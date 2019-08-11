@@ -36,6 +36,18 @@
     <ClCompile Include="XSampleTeapot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="XSampleSponza.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XShader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XUtils.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XStruct.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="XavierBase.h">
@@ -51,6 +63,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="XSampleAlpha.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XSampleSponza.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XShader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XStruct.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

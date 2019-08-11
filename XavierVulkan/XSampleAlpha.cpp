@@ -15,8 +15,6 @@ namespace Xavier {
         return true;
     }
 
-
-
     bool XSampleA::Draw()
     {
         // Initialization for the CurrentFrameData.
@@ -45,7 +43,7 @@ namespace Xavier {
         // Acquire Image.
         VkResult rst = vkAcquireNextImageKHR(xParams.xDevice, xParams.xSwapchain.handle, 200, currentFrameData.virtualFrameData->swapchainImageAvailableSemphore, VkFence(), &currentFrameData.swapChainImageIndex);
 
-        std::cout << "rst:" << rst << std::endl;;
+        std::cout << "rst:" << rst << std::endl;
         // Create FrameBuffer
 
         if (currentFrameData.virtualFrameData->frameBuffer != VK_NULL_HANDLE)
@@ -214,7 +212,6 @@ namespace Xavier {
         renderPassCreateInfo.pSubpasses = &subpassDecription[0];
         renderPassCreateInfo.dependencyCount = 2;
         renderPassCreateInfo.pDependencies = &subpassDependency[0];
-
         ZV_VK_CHECK(vkCreateRenderPass(xParams.xDevice, &renderPassCreateInfo, nullptr, &xParams.xRenderPass));
     }
 
@@ -507,6 +504,4 @@ namespace Xavier {
     {
         return true;
     }
-
-
 }

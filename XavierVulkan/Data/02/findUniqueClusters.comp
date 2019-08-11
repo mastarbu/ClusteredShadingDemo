@@ -1,0 +1,379 @@
+#version 450 core 
+#define MAX_MULTISAMPLE_COUNT 8
+#define UNVALID_CLUSTER_KEY (-1u)
+layout(local_size_x = 32, local_size_y = 32) in;
+layout(set = 0, binding = 0) uniform UBO {
+    mat4 inverseProjMat;
+    vec2 imageDimension;
+    float near;
+    float far;
+    float tanFov;    
+    int sampleNum;
+} ubo0;
+
+
+/* Storage image which store the z*/
+layout(set = 1, binding = 0, r32f) uniform image2DMS preZ;
+layout(set = 1, binding = 1, r32ui) uniform writeonly uimage2DMS clusterIndexsForEachSampel;
+
+/* AABB after reduction operation */
+struct ClusterData {
+    uint Zmin;
+    uint Zmax;
+};
+
+/* UniqueClusters */
+layout(std430, set = 1, binding = 2) buffer UniqueClusters {
+   uint clusterDataOffset;
+   ClusterData globalClusterData[];
+};
+
+/* Compacted Key and and Meta info for local sorting */
+shared uvec2 keysWithMetaInTiles [gl_WorkGroupSize.x * gl_WorkGroupSize.y * MAX_MULTISAMPLE_COUNT]; 
+shared ClusterData localUniqueClusterData[gl_WorkGroupSize.x * gl_WorkGroupSize.y * MAX_MULTISAMPLE_COUNT];
+shared uint clusterNotExistedFlags [gl_WorkGroupSize.x * gl_WorkGroupSize.y * MAX_MULTISAMPLE_COUNT];
+shared uint inValidSample;
+shared uint localOffsetToGlobal;
+
+uint packingClusterKey(uint i, uint j, uint k)
+{
+    return (k << 16) | (j << 8) | i;
+}
+
+uint packingMetaData(uint xss, uint yss, uint sampleIndex)
+{
+    return (sampleIndex << 10) | (yss << 5) | xss;
+}
+
+uvec3 unpackingClusterKey(uint key)
+{
+    uint i = key & 255;
+    uint j = (key >> 8) & 255;
+    uint k = key >> 16;
+    return uvec3(i, j, k);
+}
+
+uvec3 unpackingMetaData(uint meta)
+{
+    uint xss = meta & 31;
+    uint yss = (meta >> 5) & 31;
+    uint sampleIndex = meta >> 10;
+    return uvec3(xss, yss, sampleIndex);
+}
+
+uint getIndexForSampleInShared(uint x, uint y, int Sample)
+{
+    return Sample * gl_WorkGroupSize.x * gl_WorkGroupSize.y + y * gl_WorkGroupSize.x  + x;
+}
+
+bool compareGreater(uint left, uint right)
+{
+    return left > right;
+}
+
+bool compareGreaterOrEqual(uint left, uint right)
+{
+    return left >= right;
+}
+
+uint getFirstByOpGreaterOrEqual(uint dualGroupBase, int GroupSize, uint clusterKey)
+{
+    uint begin = dualGroupBase;
+    uint end = dualGroupBase + GroupSize;
+    /* Interval [begin, end) */
+    while(end - begin > 2)
+    {
+        uint mid = (begin + end) >> 1;
+        if(keysWithMetaInTiles[mid].x >= clusterKey)
+        {
+            end = mid + 1;
+        }
+        else
+        {
+            begin = mid + 1;    
+        }
+    }
+
+    for(uint i = begin; i < end; ++i)
+    {
+        if(keysWithMetaInTiles[i].x >= clusterKey)
+            return i - dualGroupBase;
+    }
+    return end - dualGroupBase;
+}
+
+uint getFirstByOpGreater(uint dualGroupBase, int GroupSize, uint clusterKey)
+{
+    uint begin = dualGroupBase;
+    uint end = dualGroupBase + GroupSize;
+    /* Interval is [begin, end) */
+    while(end - begin > 2)
+    {
+        uint mid = (begin + end) >> 1;
+        if(keysWithMetaInTiles[mid].x > clusterKey)
+        {
+            end = mid + 1;
+        }
+        else
+        {
+            begin = mid + 1;    
+        }
+    }
+
+    for(uint i = begin; i < end; i++)
+    {
+        if(keysWithMetaInTiles[i].x > clusterKey)
+            return i - dualGroupBase;
+    }
+    return end - dualGroupBase;
+}
+
+void main()
+{
+    /* Get the number of samples each pixel has */
+    const int sampleNum = ubo0.sampleNum;
+    const int sampleTotal = int(gl_WorkGroupSize.x * gl_WorkGroupSize.y * sampleNum);
+    const int currentPixelIndex = int(gl_LocalInvocationIndex);
+
+    /* For now we cannot get the current screen space position for each sample, we instead use position of the pixel which contains it.*/
+    uvec2 pixelRelativePos = uvec2(gl_LocalInvocationID.xy);
+    uvec2 pixalGlobalID = uvec2(gl_GlobalInvocationID.xy);
+
+    vec4 pos[MAX_MULTISAMPLE_COUNT];
+    /* Generate cluster key for all samples in this pixel */
+    for(int i = 0; i < sampleNum; ++i)
+    {
+        /* Get z value from the depth buffer.*/
+        
+        vec4 sampleDepth =  imageLoad(preZ, ivec2(pixalGlobalID.xy), i);
+        uint index = getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, i);
+        // Note: Load operations from any texel that is outside of the boundaries of the bound image will return all zeros.
+        if(sampleDepth.w == 0)
+        {
+            atomicAdd(inValidSample, 1);
+            keysWithMetaInTiles[index] = uvec2(UNVALID_CLUSTER_KEY, 0u);
+        }
+        else
+        {
+            pos[i].z = sampleDepth.r * 2 - 1.f;
+
+            /* Get Clipping Space Coordinates. */
+            vec4 posView = ubo0.inverseProjMat * pos[i];
+
+            uint clusterKeyX = gl_WorkGroupID.x;
+            uint clusterKeyY = gl_WorkGroupID.y;
+            uint clusterKeyZ = uint(log(-posView.z/ubo0.near.x) / log(1 + 2 * ubo0.tanFov / gl_NumWorkGroups.y));
+            uint clusterKeyCompacted = packingClusterKey(clusterKeyX, clusterKeyY, clusterKeyZ);
+            uint metaCompacted = packingMetaData(pixelRelativePos.x, pixelRelativePos.y, i);
+
+            keysWithMetaInTiles[index] = uvec2(clusterKeyCompacted, metaCompacted);
+        }
+    }
+
+    /* Make sure that all the cluster keys fo all the samples within this tile have already been written into the shader variable array before sorting is started. */ 
+    barrier();
+
+    /* Sorting the samples by Cluster key*/
+    /* Use Parallel Merge Sort */
+    /* Phase 1 sorted sample block of elements by a serialized algorithm */
+    uint begin = gl_LocalInvocationIndex * sampleNum;
+    for (int i = 0; i < sampleNum - 1; ++i)
+    {
+        for (int j = 0; j < sampleNum - i - 1; j++)
+        {
+            if (compareGreater(keysWithMetaInTiles[begin + j].x, keysWithMetaInTiles[begin + j + 1].x))
+            {
+                uvec2 temp = keysWithMetaInTiles[begin + j];
+                keysWithMetaInTiles[begin + j] = keysWithMetaInTiles[begin + j + 1];
+                keysWithMetaInTiles[begin + j + 1] = temp;
+            }
+        }
+    }
+    
+    /* Phase 2 Merge All with all threads in the block */
+    int groupSize = sampleNum;
+    for (; groupSize < sampleTotal; groupSize <<= 1)
+    {
+        uvec3 indexToWrite[MAX_MULTISAMPLE_COUNT];
+        for(int i = 0; i < sampleNum; i++)
+        {
+            uint index = getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, i);
+
+            uint currentGroupID = index / groupSize;            
+            uint currentGroupBase = currentGroupID * groupSize;
+            uint rankInCurrentGroupOffset = index - currentGroupBase;
+
+            uint dualGroupID = currentGroupID ^ 1;
+            uint dualGroupBase = dualGroupID * groupSize;
+            /* Ensure the stability of the merge.
+            /* compOp is GreaterOrEqual */
+            uint rankInDualGroupOffset;
+            if(dualGroupBase > currentGroupBase)
+            {
+                rankInDualGroupOffset = getFirstByOpGreaterOrEqual(dualGroupBase, groupSize, keysWithMetaInTiles[index].x);
+            }
+            /* compOP is Greater */
+            else
+            {
+                rankInDualGroupOffset = getFirstByOpGreater(dualGroupBase, groupSize, keysWithMetaInTiles[index].x);
+            }
+            uint rankInMergedGroupOffset = rankInCurrentGroupOffset + rankInDualGroupOffset;
+            uint mergedGroupBase = min(currentGroupBase, dualGroupBase);
+            uint newIndex = mergedGroupBase + rankInMergedGroupOffset;
+            indexToWrite[i].xyz = uvec3(keysWithMetaInTiles[index].xy, newIndex);
+        }
+        barrier();
+
+        for(uint i = 0; i < sampleNum; i++)
+        {
+            keysWithMetaInTiles[indexToWrite[i].z] = indexToWrite[i].xy;
+        }
+        barrier();
+    }
+
+    barrier();
+
+    /* Find Unique Clusters */
+    /* Set valid flags */
+    for(int i = 0; i < sampleNum; i++)
+    {
+        uint index = sampleNum * gl_LocalInvocationIndex + i;
+        uint indexNext = (index + 1) % sampleTotal;
+        if (keysWithMetaInTiles[index].x != keysWithMetaInTiles[indexNext].x) 
+        {
+            clusterNotExistedFlags[i] = 1;
+        }
+        else
+        {
+            clusterNotExistedFlags[i] = 0;
+        }
+    }
+
+    /* Exclusive Prefix Sum on the ClusterNotExistedFlags[0, totalSample) */
+    /* Reduction Stage */
+    /* Phase 1 */
+    uint s = 1;
+    for(; s < sampleNum; s <<= 1)
+    {
+        for(int i = 0; i < sampleNum; i += 2)
+        {
+            uint index = getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, i);
+            if ((index & s - 1) == index)
+            {
+                clusterNotExistedFlags[index * 2 + 1] += clusterNotExistedFlags[index * 2 + 1 - s];
+
+            }
+        }
+        barrier(); // make sure all adds at one stage are done!
+    }
+    
+    /* Phase 2 */
+    for(; s < sampleTotal; s <<= 1) 
+    {
+        uint index = sampleNum * getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, 0) + sampleNum - 1;
+        if ((index & ((s << 1) - 1)) == index)
+        {
+            clusterNotExistedFlags[index] += clusterNotExistedFlags[index - s];
+        }
+        barrier();
+    }
+
+    uint localUniqueClusterCount = clusterNotExistedFlags[sampleTotal - 1];
+    barrier();
+    if(pixelRelativePos.x == 0 && pixelRelativePos.y == 0)
+    {
+        clusterNotExistedFlags[sampleTotal - 1] = 0;
+    } 
+
+    s >>= 1;
+    barrier();
+    /* DownSweep Stage */
+    /* Phase 1 */
+    for (; s >= sampleNum; s >>= 1)
+    {
+        uint index = sampleNum * getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, 0) + sampleNum - 1;
+        if ((index & ((s << 1) - 1)) == index)
+        {
+            uint temp = clusterNotExistedFlags[index + s]; 
+            clusterNotExistedFlags[index + s] += clusterNotExistedFlags[index];
+            clusterNotExistedFlags[index] = temp;
+        }
+        barrier();
+    }
+    /* Phase 2 */
+    for(; s > 0; s >>= 1)
+    {
+        for(int i = 0; i < sampleNum; i += 2)
+        {
+            uint index = getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, i);
+            if ((index & (s - 1)) == index)
+            {
+                uint temp = clusterNotExistedFlags[index * 2 + s]; 
+                clusterNotExistedFlags[index * 2  + s] += clusterNotExistedFlags[index * 2];
+                clusterNotExistedFlags[index * 2] = temp;
+            }
+        }
+        barrier(); // Make sure all adds at one stage are done!
+    }
+
+    barrier();
+    /* Update cluster Buffers*/
+    const uint lastIndex = sampleTotal - 1;
+     
+    /* Append Local cluster buffer To Global cluster buffer */
+    if (pixelRelativePos.x == 0 && pixelRelativePos.y == 0)
+    {
+        if(inValidSample > 0)
+        {   
+            localUniqueClusterCount -= 1 ;
+        }
+
+        localOffsetToGlobal = atomicAdd(clusterDataOffset, localUniqueClusterCount);
+    }
+    barrier();
+
+    /* Initialize the localUniqueClusterData */
+    if(currentPixelIndex < localUniqueClusterCount)
+    {
+        localUniqueClusterData[currentPixelIndex].Zmin = 0u;
+        localUniqueClusterData[currentPixelIndex].Zmax = 0xFFFFFFFFu;
+    }
+    
+    barrier();
+
+    for (int i = 0; i < sampleNum; i++)
+    {
+        uint index = getIndexForSampleInShared(pixelRelativePos.x, pixelRelativePos.y, i);
+        uint clusterIndex = clusterNotExistedFlags[index];
+        uint clusterKeyCompacted = keysWithMetaInTiles[clusterIndex].x;
+        if (clusterKeyCompacted == UNVALID_CLUSTER_KEY)
+        {
+            continue;
+        }
+        else
+        {
+            uvec3 metaData = unpackingMetaData(keysWithMetaInTiles[clusterIndex].y);
+            float depth = imageLoad(preZ, ivec2(metaData.xy), int(metaData.z)).z;
+            depth = clamp(depth, 0.0, 1.0);
+            uint depthUNORM32 = uint(depth * 0xFFFFFFFFu);
+            vec4 pos;
+            /* Update clusterData's AABB */
+            atomicMin(localUniqueClusterData[clusterIndex].Zmin, depthUNORM32);
+            atomicMax(localUniqueClusterData[clusterIndex].Zmax, depthUNORM32);
+
+            /* Write ClusterIndex for each sample into the storage image */
+            imageStore(clusterIndexsForEachSampel, ivec2(metaData.xy), int(metaData.z), uvec4(localOffsetToGlobal + clusterIndex, 0, 0, 0));
+        }
+    }
+
+    barrier();
+
+    /* Thread(0, 0) Copy local cluster to global cluster*/
+    if (pixelRelativePos.x == 0 && pixelRelativePos.y == 0)
+    {
+        for(int i = 0; i < localUniqueClusterCount; ++i)
+        {
+            globalClusterData[localOffsetToGlobal + i] = localUniqueClusterData[i];
+        }
+    }
+}

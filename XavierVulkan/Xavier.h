@@ -1,9 +1,12 @@
 #pragma once
+
+#include "XStruct.h"
+#include "XavierBase.h"
+#include "XShader.h"
+
+#include <vector>
 #include <fstream>
 #include <iostream>
-#include "XavierBase.h"
-#include <vector>
-
 // Macro for return value checking of the Vulkan API calls.
 #define ZV_VK_CHECK( x ) { \
 	VkResult ret = x; \
@@ -20,283 +23,181 @@
     } \
 }
 
-namespace Xavier {
+namespace Xavier
+{
 
-    struct ImageParameters {
-        VkImage handle;
-        VkImageView view;
-        VkSampler sampler;
-        VkDeviceMemory memory;
+	class XRender : public XRenderBase
+	{
+		// Methods
+	public:
+		bool onWindowSizeChanged() override;
+		bool Prepare(SDLWindow &win);
 
-        ImageParameters() :
-            handle(VK_NULL_HANDLE),
-            view(VK_NULL_HANDLE),
-            sampler(VK_NULL_HANDLE),
-            memory(VK_NULL_HANDLE)
-        {   }
+		virtual bool prepareRenderSample() = 0;
 
-    };
-
-    struct BufferParameters
-    {
-        VkBuffer handle;
-        VkDeviceMemory memory;
-        uint32_t size;
-        BufferParameters() :
-            handle(VK_NULL_HANDLE),
-            memory(VK_NULL_HANDLE),
-            size(0u)
-        {   }
-    };
-
-    struct XSwapchain {
-        VkSwapchainKHR handle;
-        std::vector<ImageParameters> images;
-        VkExtent2D extent;
-        VkFormat format;
-        XSwapchain() :
-            handle(VK_NULL_HANDLE),
-            images(),
-            extent(),
-            format(VK_FORMAT_UNDEFINED)
-        { }
-    };
-
-    struct XVertexData {
-        struct Position {
-            float x, y, z; 
-        } pos;
-
-        struct Color {
-            float r, g, b, a;
-        } color;
-    };
-    
-    struct XRenderParas {
-
-        std::vector<const char *> xLayers;
-        std::vector<const char *> xInstanceExtensions;
-        std::vector<const char *> xDeviceExtensions;
-
-        VkInstance xInstance;
-        VkPhysicalDevice xPhysicalDevice;
-
-        VkDevice xDevice;
-
-        uint32_t xPresentFamilyQueueIndex;
-        uint32_t xGraphicFamilyQueueIndex;
-
-        VkQueue xGraphicQueue;
-        VkQueue xPresentQueue;
-
-        VkSurfaceKHR xSurface;
-
-        XSwapchain xSwapchain;
-
-        VkCommandPool xRenderCmdPool;
-
-        VkCommandBuffer xCopyCmd;
-        VkFence xCopyFence;
-
-        VkFramebuffer xFramebuffer;
-
-        VkRenderPass xRenderPass;
-
-        VkPipeline xPipeline;
-        VkPipelineLayout xPipelineLayout;
-
-        BufferParameters xVertexBuffer;
-
-        BufferParameters xIndexBuffer;
-
-        VkDescriptorPool xDescriptorPool;
-        
-
+	protected:
+		bool prepareVulkan();
+		bool createInstance();
 #if defined (_DEBUG)
-        VkDebugReportCallbackEXT xReportCallback;
-#endif
-        
-    };
-
-    struct XVirtualFrameData {
-        VkFence CPUGetChargeOfCmdBufFence;
-        VkSemaphore swapchainImageAvailableSemphore;
-        VkSemaphore renderFinishedSemphore;
-        VkCommandBuffer commandBuffer;
-        VkFramebuffer frameBuffer;
-        ImageParameters depthImage;
-    };
-
-    class XRender : public XRenderBase
-    {
-        // Methods
-    public:
-        bool onWindowSizeChanged() override;
-        bool Prepare(SDLWindow &win);
-
-        virtual bool prepareRenderSample() = 0;
-
-    private:
-        bool prepareVulkan();
-        bool createInstance();
-#if defined (_DEBUG)
-        bool initDebug();
+		bool initDebug();
 #endif 
-        bool createSurface();
-        bool createDevice();
-        bool createDeviceQueue();
-        bool createSwapChain();
-        bool createCommandPool();
-        bool createCopyCommand();
+		bool createSurface();
+		bool createDevice();
+		bool createDeviceQueue();
+		bool createSwapChain();
+		bool createCommandPool();
+		bool createCopyCommand();
 
-        bool checkQueueFamilySupport(VkPhysicalDevice physicalDevice, uint32_t &graphicQueueFamilyIndex, uint32_t &presentQueueFamilyIndex);
-        bool checkInstanceLayersSupport(const std::vector<VkLayerProperties> &layersProperties, const char *targetLayer);
-        bool checkInstanceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
-        bool checkPhysicalDeviceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
+		bool checkQueueFamilySupport(VkPhysicalDevice physicalDevice, uint32_t &graphicQueueFamilyIndex, uint32_t &presentQueueFamilyIndex);
+		bool checkQueueFamilySupportForCompute(VkPhysicalDevice physicalDevice, uint32_t &computeQueueFamilyIndex);
+		bool checkInstanceLayersSupport(const std::vector<VkLayerProperties> &layersProperties, const char *targetLayer);
+		bool checkInstanceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
+		bool checkPhysicalDeviceExtensionsSupport(const std::vector<VkExtensionProperties> &extensionProperties, const char *targetExtension);
 
-        
-        // helper functions.
-        uint32_t xGetImagesCountForSwapchain(const VkSurfaceCapabilitiesKHR &surfaceCap)
-        {
-            uint32_t rst = surfaceCap.minImageCount + 2;
-            if (surfaceCap.maxImageCount > 0 && rst > surfaceCap.maxImageCount)
-                rst = surfaceCap.maxImageCount;
-            return rst;
-        }
+		bool prepareContextParams();
 
-        VkSurfaceFormatKHR xGetImageFormatForSwapchain(const std::vector<VkSurfaceFormatKHR> &surfaceSupportFormats)
-        {
-            VkSurfaceFormatKHR rst;
-            if (surfaceSupportFormats.size() == 1 && surfaceSupportFormats[0].format == VK_FORMAT_UNDEFINED)
-            {
-                rst.format = VK_FORMAT_R8G8B8A8_UNORM;
-                rst.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
-                return rst;
-            }
+		bool prepareVirtualFrames();
+		bool createBuffer(BufferParameters &buff, VkMemoryPropertyFlags flags);
+		bool createDepthBuffer(ImageParameters &depthImage);
+		bool createGlobalStagingBuffer();
 
-            for (const VkSurfaceFormatKHR &format : surfaceSupportFormats)
-            {
-                if (format.format == VK_FORMAT_R8G8B8A8_UNORM)
-                    return format;
-            }
-            return surfaceSupportFormats[0];
-        }
+		VkAccessFlags getBufferAccessTypes(VkBufferUsageFlags flags, VkPipelineStageFlags consumingStages);
+		bool wholeBufferPipelineBarrier(BufferParameters &bufferParams, VkPipelineStageFlags srcStageFlags, VkPipelineStageFlags dstStageFlags, VkAccessFlags srcAccess, VkAccessFlags dstAccess);
+		bool getDataForBuffer(void *data, uint32_t size,
+			BufferParameters &bufferParams,
+			VkPipelineStageFlags consumingStage);
+	
+		VkAccessFlags getImageAccessTypes(VkImageUsageFlags flags, VkPipelineStageFlags consumingStages);
+		bool imagePipelineBarrier(ImageParameters &image, VkPipelineStageFlags srcStageFlags, VkPipelineStageFlags dstStageFlags, VkAccessFlags srcAccess, VkAccessFlags dstAccess, VkImageLayout oldLayout, VkImageLayout newLayout);
+		bool getDataForImage2D(void *data, uint32_t size,
+			ImageParameters &bufferParams,
+			VkPipelineStageFlags consuingStages);
 
-        VkExtent2D xGetImageExtent(const VkSurfaceCapabilitiesKHR &surfaceCap)
-        {
-            VkExtent2D currentExtent = surfaceCap.currentExtent;
-            if (currentExtent.height == -1)
-            {
-                return surfaceCap.maxImageExtent;
-            }
-            return currentExtent;
-        }
+		// helper functions.
+		uint32_t xGetImagesCountForSwapchain(const VkSurfaceCapabilitiesKHR &surfaceCap)
+		{
+			uint32_t rst = surfaceCap.minImageCount + 2;
+			if ( surfaceCap.maxImageCount > 0 && rst > surfaceCap.maxImageCount )
+				rst = surfaceCap.maxImageCount;
+			return rst;
+		}
 
-        VkImageUsageFlags xGetImageUsage(const VkSurfaceCapabilitiesKHR &surfaceCap)
-        {
-            VkImageUsageFlags surfaceSupportUsage = surfaceCap.supportedUsageFlags;
-            if (surfaceSupportUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-                return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-            std::cout << "The images which the surface provides can not be used for color attachment." << std::endl;
-            return static_cast<VkImageUsageFlags>(-1);
-        }
+		VkSurfaceFormatKHR xGetImageFormatForSwapchain(const std::vector<VkSurfaceFormatKHR> &surfaceSupportFormats)
+		{
+			VkSurfaceFormatKHR rst;
+			if ( surfaceSupportFormats.size() == 1 && surfaceSupportFormats[0].format == VK_FORMAT_UNDEFINED )
+			{
+				rst.format = VK_FORMAT_R8G8B8A8_UNORM;
+				rst.colorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR;
+				return rst;
+			}
 
-        VkSurfaceTransformFlagBitsKHR xGetImageTransform(const VkSurfaceCapabilitiesKHR &surfaceCap)
-        {
-            if (surfaceCap.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-            {
-                return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-            }
-            return surfaceCap.currentTransform;
-        }
+			for ( const VkSurfaceFormatKHR &format : surfaceSupportFormats )
+			{
+				if ( format.format == VK_FORMAT_R8G8B8A8_UNORM )
+					return format;
+			}
+			return surfaceSupportFormats[0];
+		}
 
-        VkPresentModeKHR xGetSurfacePresentMode(const std::vector<VkPresentModeKHR> &surfaceSupportPresentModes)
-        {
-            for (VkPresentModeKHR mode : surfaceSupportPresentModes)
-            {
-                if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
-                {
-                    return mode;
-                }
-            }
+		VkExtent2D xGetImageExtent(const VkSurfaceCapabilitiesKHR & surfaceCap)
+		{
+			VkExtent2D currentExtent = surfaceCap.currentExtent;
+			if ( currentExtent.height == -1 )
+			{
+				return surfaceCap.maxImageExtent;
+			}
+			return currentExtent;
+		}
 
-            for (VkPresentModeKHR mode : surfaceSupportPresentModes)
-            {
-                if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
-                {
-                    return mode;
-                }
-            }
+		VkImageUsageFlags xGetImageUsage(const VkSurfaceCapabilitiesKHR & surfaceCap)
+		{
+			VkImageUsageFlags surfaceSupportUsage = surfaceCap.supportedUsageFlags;
+			if ( surfaceSupportUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT )
+				return VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			std::cout << "The images which the surface provides can not be used for color attachment." << std::endl;
+			return static_cast<VkImageUsageFlags>(-1);
+		}
 
-            for (VkPresentModeKHR mode : surfaceSupportPresentModes)
-            {
-                if (mode == VK_PRESENT_MODE_FIFO_KHR)
-                {
-                    return mode;
-                }
-            }
+		VkSurfaceTransformFlagBitsKHR xGetImageTransform(const VkSurfaceCapabilitiesKHR & surfaceCap)
+		{
+			if ( surfaceCap.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR )
+			{
+				return VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+			}
+			return surfaceCap.currentTransform;
+		}
 
-            std::cout << "FIFO present mode is not supported by the surface" << std::endl;
-            return static_cast<VkPresentModeKHR>(-1);
-        }
+		VkPresentModeKHR xGetSurfacePresentMode(const std::vector<VkPresentModeKHR> & surfaceSupportPresentModes)
+		{
+			for ( VkPresentModeKHR mode : surfaceSupportPresentModes )
+			{
+				if ( mode == VK_PRESENT_MODE_MAILBOX_KHR )
+				{
+					return mode;
+				}
+			}
 
-    protected:
-        std::vector<char> m_getFileBinaryContent(const std::string &fileName)
-        {
-            std::vector<char> bytes;
-            std::ifstream file(fileName, std::ios::binary);
-            if (file.fail())
-            {
-                std::cout << "Open File: " << fileName.c_str() << "Failed !" << std::endl;
-            }
-            else
-            {
-                std::streampos begin, end;
-                begin = file.tellg();
-                file.seekg(0, std::ios::end);
-                end = file.tellg();
+			for ( VkPresentModeKHR mode : surfaceSupportPresentModes )
+			{
+				if ( mode == VK_PRESENT_MODE_IMMEDIATE_KHR )
+				{
+					return mode;
+				}
+			}
 
-                // Read the file from begin to end.
-                bytes.resize(end - begin);
-                file.seekg(0, std::ios::beg);
-                file.read(bytes.data(), static_cast<size_t>(end - begin));
-            }
-            return bytes;
-        }
+			for ( VkPresentModeKHR mode : surfaceSupportPresentModes )
+			{
+				if ( mode == VK_PRESENT_MODE_FIFO_KHR )
+				{
+					return mode;
+				}
+			}
 
-        std::string m_getAssetPath()
-        {
-            return SAMPLE_DATA_DIR;
-        }
+			std::cout << "FIFO present mode is not supported by the surface" << std::endl;
+			return static_cast<VkPresentModeKHR>(-1);
+		}
 
-        std::string m_getTexturePath()
-        {
-            return m_getAssetPath() + "/teapot/";
-        }
+	protected:
+		std::vector<char> m_getFileBinaryContent(const std::string & fileName)
+		{
+			return utils::m_getFileBinaryContent(fileName);
+		}
 
-        bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory *memory, VkMemoryPropertyFlags addtionProps);
-        bool allocateImageMemory(VkImage image, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
+		std::string m_getAssetPath()
+		{
+			return SAMPLE_DATA_DIR;
+		}
 
-      protected:
-        // 9 Attributes
-        SDLWindowPara winParam;
-        XRenderParas xParams;
+		std::string m_getTexturePath()
+		{
+			return m_getAssetPath() + "/teapot/";
+		}
 
-        std::vector<XVirtualFrameData> xVirtualFrames;
-        size_t currentFrameIndex;
+		bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
+		bool allocateImageMemory(VkImage image, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
 
-    };
+	protected:
+		// 9 Attributes
+		SDLWindowPara winParam;
+		XRenderParas xParams;
+		ContextParams xContextParams;
+
+		std::vector<XVirtualFrameData> xVirtualFrames;
+		size_t currentFrameIndex;
+
+	};
 
 #if defined(_DEBUG)
-    VKAPI_ATTR VkBool32 VKAPI_PTR zvDebugReportCallback(
-        VkDebugReportFlagsEXT                        flags,
-        VkDebugReportObjectTypeEXT                   objectType,
-        uint64_t                                     object,
-        size_t                                       location,
-        int32_t                                      messageCode,
-        const char *                                 pLayerPrefix,
-        const char *                                 pMessage,
-        void *                                       pUserData);
+	VKAPI_ATTR VkBool32 VKAPI_PTR zvDebugReportCallback(
+		VkDebugReportFlagsEXT                        flags,
+		VkDebugReportObjectTypeEXT                   objectType,
+		uint64_t                                     object,
+		size_t                                       location,
+		int32_t                                      messageCode,
+		const char *pLayerPrefix,
+		const char *pMessage,
+		void *pUserData);
 
 #endif
 

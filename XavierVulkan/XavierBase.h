@@ -21,7 +21,7 @@ namespace Xavier {
   };
   
   struct SDLWindowPara{
-   SDL_Window *pWindow;
+   SDL_Window* pWindow;
   };
 
 

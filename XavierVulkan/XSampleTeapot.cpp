@@ -1,7 +1,7 @@
 #include "XSampleTeapot.h"
-#include "assimp\Importer.hpp"
-#include "assimp\postProcess.h"
-#include "assimp\scene.h"
+#include "assimp/Importer.hpp"
+#include "assimp/postProcess.h"
+#include "assimp/scene.h"
 #include <glm/glm.hpp>
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
@@ -35,7 +35,6 @@ bool Xavier::XSampleTeapot::Draw()
     // Create FrameBuffer
     if (currentFrameData.virtualFrameData->frameBuffer != VK_NULL_HANDLE)
         vkDestroyFramebuffer(xParams.xDevice, currentFrameData.virtualFrameData->frameBuffer, nullptr);
-
 
     std::vector<VkImageView> attachments = { xParams.xSwapchain.images[currentFrameData.swapChainImageIndex].view,
         currentFrameData.virtualFrameData->depthImage.view };
@@ -103,10 +102,12 @@ bool Xavier::XSampleTeapot::loadAsserts()
     {
         aiNode *rootNode = scene->mRootNode;
         uint32_t indexBase = 0;
-        for (unsigned int i = 0; i < rootNode->mNumMeshes; ++i)
+        for (unsigned int i = 0; i < rootNode->mNumChildren; ++i)
         {
             // Since we import the file with "aiProcess_PreTransformVertices" flag, all meshes will correspond to only one childNode.
-            unsigned int meshIndex = rootNode->mMeshes[i];
+			aiNode *childNode = rootNode->mChildren[i];
+
+            unsigned int meshIndex = childNode->mMeshes[0];
             aiMesh *mesh = scene->mMeshes[meshIndex];
             bool rest = loadMesh(mesh, indexBase);
         }
@@ -286,17 +287,14 @@ bool Xavier::XSampleTeapot::loadAsserts()
         vkQueueSubmit(xParams.xGraphicQueue, 1, &submit, xParams.xCopyFence);
         // Destroy two staging buffers.
         vkQueueWaitIdle(xParams.xGraphicQueue);
-        std::cout << "f";
+
         vkFreeMemory(xParams.xDevice, vertexStageBuffer.memory, nullptr);
-        std::cout << "u";
+
         vkDestroyBuffer(xParams.xDevice, vertexStageBuffer.handle, nullptr);
-        std::cout << "c";
+ 
         vkFreeMemory(xParams.xDevice, indexStageBuffer.memory, nullptr);
-        std::cout << "k";
+
         vkDestroyBuffer(xParams.xDevice, indexStageBuffer.handle, nullptr);
-        std::cout << "!";
-
-
 
         // Load Texture Materials
         for (uint32_t i = 0; i < scene->mNumMaterials; ++i)
@@ -317,7 +315,8 @@ bool Xavier::XSampleTeapot::loadAsserts()
                         xMat.texDiffuse = xTex;
                     }
 
-                    else {
+                    else 
+					{
                         // Load dummy texture
                         // However we dont have dummy texture to load 
                         // [TODO]
@@ -326,7 +325,8 @@ bool Xavier::XSampleTeapot::loadAsserts()
                     }
                 }
             }
-            else {
+            else 
+			{
                 xMat.texDiffuse = nullptr;
                 std::cout << "The material does not contain diffuse texture !" << std::endl;
             }
@@ -1124,22 +1124,22 @@ bool Xavier::XSampleTeapot::prepareRenderPasses()
     attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    VkSubpassDependency subpassDependencies[2] = {};
-    subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    subpassDependencies[0].dstSubpass = 0;
-    subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpassDependencies[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    //VkSubpassDependency subpassDependencies[2] = {};
+    //subpassDependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+    //subpassDependencies[0].dstSubpass = 0;
+    //subpassDependencies[0].srcStageMask = VK_PIPELINE_STAGE_HOST_BIT;
+    //subpassDependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    //subpassDependencies[0].srcAccessMask = VK_ACCESS_HOST_READ_BIT;
+    //subpassDependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    //subpassDependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    subpassDependencies[1].srcSubpass = 0;
-    subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    subpassDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    subpassDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    subpassDependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    subpassDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+    //subpassDependencies[1].srcSubpass = 0;
+    //subpassDependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+    //subpassDependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    //subpassDependencies[1].dstStageMask = VK_PIPELINE_STAGE_HOST_BIT;
+    //subpassDependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    //subpassDependencies[1].dstAccessMask = VK_PIPELINE_STAGE_HOST_BIT;
+    //subpassDependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     // Attachment descs for the Subpass 0.
     VkAttachmentReference attachRef[2] = {};
@@ -1168,8 +1168,8 @@ bool Xavier::XSampleTeapot::prepareRenderPasses()
     renderPassCreateInfo.pAttachments = &attachments[0];
     renderPassCreateInfo.subpassCount = 1;
     renderPassCreateInfo.pSubpasses = &subpassDesc;
-    renderPassCreateInfo.dependencyCount = 2;
-    renderPassCreateInfo.pDependencies = &subpassDependencies[0];
+    renderPassCreateInfo.dependencyCount = 0;
+	renderPassCreateInfo.pDependencies = nullptr; // &subpassDependencies[0];
 
     ZV_VK_CHECK(vkCreateRenderPass(xParams.xDevice, &renderPassCreateInfo, nullptr, &xParams.xRenderPass));
     return true;

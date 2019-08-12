@@ -166,12 +166,12 @@ namespace Xavier
 
 		std::string m_getAssetPath()
 		{
-			return SAMPLE_DATA_DIR;
+			return "Data/";
 		}
 
 		std::string m_getTexturePath()
 		{
-			return m_getAssetPath() + "/teapot/";
+			return m_getAssetPath() + "teapot/";
 		}
 
 		bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);

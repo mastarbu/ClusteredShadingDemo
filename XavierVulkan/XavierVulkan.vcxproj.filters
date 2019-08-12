@@ -33,9 +33,6 @@
     <ClCompile Include="XSampleTeapot.h">
       <Filter>Header Files</Filter>
     </ClCompile>
-    <ClCompile Include="XSampleTeapot.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="XSampleSponza.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -46,6 +43,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="XStruct.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="XSampleTeapot.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

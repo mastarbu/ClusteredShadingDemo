@@ -629,7 +629,6 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         ZV_VK_CHECK(vkBindImageMemory(xParams.xDevice, xTex->handle, xTex->memory, 0));
 
 
-
         VkCommandBuffer copyCmd;
 
         VkCommandBufferAllocateInfo cmdbufAllocInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };

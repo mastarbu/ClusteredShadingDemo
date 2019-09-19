@@ -233,8 +233,10 @@ bool Xavier::XSampleSponza::prepareCameraAndLights()
 	vkUpdateDescriptorSets(xParams.xDevice, 1, &commonSetWrite, 0, nullptr);
 
 	ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
-	vkFreeMemory(xParams.xDevice, staging.memory, nullptr);
+
 	vkDestroyBuffer(xParams.xDevice, staging.handle, nullptr);
+	vkFreeMemory(xParams.xDevice, staging.memory, nullptr);
+	
 
 	return true;
 }
@@ -453,13 +455,13 @@ bool Xavier::XSampleSponza::loadAssets(const std::string &objRelPath)
 		// Destroy two staging buffers.
 		vkQueueWaitIdle(xParams.xGraphicQueue);
 		
+		vkDestroyBuffer(xParams.xDevice, vertexStageBuffer.handle, nullptr);
 		vkFreeMemory(xParams.xDevice, vertexStageBuffer.memory, nullptr);
 	
-		vkDestroyBuffer(xParams.xDevice, vertexStageBuffer.handle, nullptr);
-	
+		vkDestroyBuffer(xParams.xDevice, indexStageBuffer.handle, nullptr);
 		vkFreeMemory(xParams.xDevice, indexStageBuffer.memory, nullptr);
 	
-		vkDestroyBuffer(xParams.xDevice, indexStageBuffer.handle, nullptr);
+		
 	
 
 

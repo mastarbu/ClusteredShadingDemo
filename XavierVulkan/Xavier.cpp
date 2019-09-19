@@ -138,6 +138,7 @@ namespace Xavier
 
         return true;
     }
+
     bool XRender::createInstance()
     {
         // Get WSI extensions from SDL (we can add more if we like - we just can't remove these)
@@ -553,7 +554,7 @@ namespace Xavier
         for (uint32_t i = 0; i < queueFamilyPropertyCount; i++)
         {
             VkQueueFamilyProperties prop = queueFamilyProperties[i];
-           if(prop.queueFlags & VK_QUEUE_COMPUTE_BIT && prop.queueFlags & VK_QUEUE_GRAPHICS_BIT == 0)
+           if((prop.queueFlags & VK_QUEUE_COMPUTE_BIT) && (prop.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
            {
                computeQueueFamilyIndex = i;
                return true;
@@ -764,7 +765,7 @@ namespace Xavier
 
 		ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &vertStageBufCreateInfo, nullptr, &buff.handle));
 
-		ZV_VK_VALIDATE(allocateBufferMemory(buff.handle, &buff.memory, flags), "CREATION FOR VERTEX STAGING BUFFER FAILED !");
+		ZV_VK_VALIDATE(allocateBufferMemory(buff.handle, &buff.memory, flags, buff.memorySize), "CREATION FOR VERTEX STAGING BUFFER FAILED !");
 
 		ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, buff.handle, buff.memory, 0));
 
@@ -1170,7 +1171,7 @@ namespace Xavier
 	}
 
 
-    bool XRender::allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps)
+    bool XRender::allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps, VkDeviceSize &aActualSize)
     {
         VkMemoryRequirements memRequires;
         vkGetBufferMemoryRequirements(xParams.xDevice, buffer, &memRequires);
@@ -1190,10 +1191,15 @@ namespace Xavier
                 memAllocInfo.allocationSize = memRequires.size;
                 memAllocInfo.memoryTypeIndex = i;
 
-                if (vkAllocateMemory(xParams.xDevice, &memAllocInfo, nullptr, memory) == VK_SUCCESS)
-                    return true;
+				if ( vkAllocateMemory(xParams.xDevice, &memAllocInfo, nullptr, memory) == VK_SUCCESS )
+				{
+					aActualSize = memAllocInfo.allocationSize;
+					return true;
+				}
+
             }
         }
+		aActualSize = 0;
         return false;
     }
 
@@ -1214,7 +1220,7 @@ namespace Xavier
             {
                 VkMemoryAllocateInfo memAllocInfo = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
                 memAllocInfo.pNext = nullptr;
-                memAllocInfo.allocationSize = memRequires.size;
+				memAllocInfo.allocationSize = memRequires.size;
                 memAllocInfo.memoryTypeIndex = i;
 
                 if (vkAllocateMemory(xParams.xDevice, &memAllocInfo, nullptr, memory) == VK_SUCCESS)

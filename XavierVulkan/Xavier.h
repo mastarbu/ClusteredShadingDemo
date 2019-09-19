@@ -174,7 +174,7 @@ namespace Xavier
 			return m_getAssetPath() + "teapot/";
 		}
 
-		bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
+		bool allocateBufferMemory(VkBuffer buffer, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps, VkDeviceSize &aDeviceSize);
 		bool allocateImageMemory(VkImage image, VkDeviceMemory * memory, VkMemoryPropertyFlags addtionProps);
 
 	protected:

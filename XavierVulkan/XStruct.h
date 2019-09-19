@@ -42,6 +42,7 @@ namespace Xavier
 	{
 		VkBuffer handle;
 		VkDeviceMemory memory;
+		VkDeviceSize memorySize;
 		uint32_t size;
 		VkBufferUsageFlags usageFlags;
 		bool isStaging;
@@ -49,6 +50,7 @@ namespace Xavier
 			handle(VK_NULL_HANDLE),
 			memory(VK_NULL_HANDLE),
 			size(0u),
+			memorySize(0u),
 			usageFlags(VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM),
 			isStaging(false)
 		{

@@ -124,7 +124,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
         vertBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &vertBufCreateInfo, nullptr, &xParams.xVertexBuffer.handle));
 
-        ZV_VK_VALIDATE(allocateBufferMemory(xParams.xVertexBuffer.handle, &xParams.xVertexBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "CREATION FOR VERTEX BUFFER FAILED !");
+        ZV_VK_VALIDATE(allocateBufferMemory(xParams.xVertexBuffer.handle, &xParams.xVertexBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, xParams.xVertexBuffer.memorySize), "CREATION FOR VERTEX BUFFER FAILED !");
 
         ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, xParams.xVertexBuffer.handle, xParams.xVertexBuffer.memory, 0));
 
@@ -142,13 +142,13 @@ bool Xavier::XSampleTeapot::loadAsserts()
         vertStageBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &vertStageBufCreateInfo, nullptr, &vertexStageBuffer.handle));
 
-        ZV_VK_VALIDATE(allocateBufferMemory(vertexStageBuffer.handle, &vertexStageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), "CREATION FOR VERTEX STAGING BUFFER FAILED !");
+        ZV_VK_VALIDATE(allocateBufferMemory(vertexStageBuffer.handle, &vertexStageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertexStageBuffer.memorySize), "CREATION FOR VERTEX STAGING BUFFER FAILED !");
 
         ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, vertexStageBuffer.handle, vertexStageBuffer.memory, 0));
 
         // Load data for vertex input.
         void *mapAddress;
-        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, vertexStageBuffer.memory, 0, vertexStageBuffer.size, 0, &mapAddress));
+        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, vertexStageBuffer.memory, 0, vertexStageBuffer.memorySize, 0, &mapAddress));
 
         memcpy(mapAddress, xParamsTeapot.vertices.data(), vertexStageBuffer.size);
 
@@ -156,7 +156,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
         memRange.memory = vertexStageBuffer.memory;
         memRange.pNext = nullptr;
         memRange.offset = 0;
-        memRange.size = vertexStageBuffer.size;
+        memRange.size = vertexStageBuffer.memorySize;
         ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &memRange));
 
         // Copy from staging buffer to vertex buffer.
@@ -212,7 +212,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
         indexBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &indexBufCreateInfo, nullptr, &xParams.xIndexBuffer.handle));
 
-        ZV_VK_VALIDATE(allocateBufferMemory(xParams.xIndexBuffer.handle, &xParams.xIndexBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "CREATION FOR INDEX BUFFER FAILED !") ;
+        ZV_VK_VALIDATE(allocateBufferMemory(xParams.xIndexBuffer.handle, &xParams.xIndexBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, xParams.xIndexBuffer.memorySize), "CREATION FOR INDEX BUFFER FAILED !") ;
 
         ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, xParams.xIndexBuffer.handle, xParams.xIndexBuffer.memory, 0));
 
@@ -229,12 +229,12 @@ bool Xavier::XSampleTeapot::loadAsserts()
         indexStageBufCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &indexStageBufCreateInfo, nullptr, &indexStageBuffer.handle));
 
-        ZV_VK_VALIDATE(allocateBufferMemory(indexStageBuffer.handle, &indexStageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), "CREATION FOR INDEX STAGING BUFFER FAILED !");
+        ZV_VK_VALIDATE(allocateBufferMemory(indexStageBuffer.handle, &indexStageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, indexStageBuffer.memorySize), "CREATION FOR INDEX STAGING BUFFER FAILED !");
 
         ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, indexStageBuffer.handle, indexStageBuffer.memory, 0));
 
         // Load data for index input.
-        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, indexStageBuffer.memory, 0, indexStageBuffer.size, 0, &mapAddress));
+        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, indexStageBuffer.memory, 0, indexStageBuffer.memorySize, 0, &mapAddress));
 
         memcpy(mapAddress, xParamsTeapot.indices.data(), indexStageBuffer.size);
 
@@ -242,7 +242,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
         memRange.memory = indexStageBuffer.memory;
         memRange.pNext = nullptr;
         memRange.offset = 0;
-        memRange.size = indexStageBuffer.size;
+        memRange.size = indexStageBuffer.memorySize;
         ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &memRange));
 
         // Copy from staging buffer to vertex buffer.
@@ -288,13 +288,11 @@ bool Xavier::XSampleTeapot::loadAsserts()
         // Destroy two staging buffers.
         vkQueueWaitIdle(xParams.xGraphicQueue);
 
+		vkDestroyBuffer(xParams.xDevice, vertexStageBuffer.handle, nullptr);
         vkFreeMemory(xParams.xDevice, vertexStageBuffer.memory, nullptr);
 
-        vkDestroyBuffer(xParams.xDevice, vertexStageBuffer.handle, nullptr);
- 
+		vkDestroyBuffer(xParams.xDevice, indexStageBuffer.handle, nullptr);
         vkFreeMemory(xParams.xDevice, indexStageBuffer.memory, nullptr);
-
-        vkDestroyBuffer(xParams.xDevice, indexStageBuffer.handle, nullptr);
 
         // Load Texture Materials
         for (uint32_t i = 0; i < scene->mNumMaterials; ++i)
@@ -355,7 +353,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
             uniformBufferCreateInfo.queueFamilyIndexCount = 0;
             uniformBufferCreateInfo.pQueueFamilyIndices = nullptr;
             ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &uniformBufferCreateInfo, nullptr, &xMat.propUniformBuffer.handle));
-            ZV_VK_VALIDATE(allocateBufferMemory(xMat.propUniformBuffer.handle, &xMat.propUniformBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "MEMORY ALLOCATION FOR UNIFORM BUFFER FAILED !");
+            ZV_VK_VALIDATE(allocateBufferMemory(xMat.propUniformBuffer.handle, &xMat.propUniformBuffer.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, xMat.propUniformBuffer.memorySize), "MEMORY ALLOCATION FOR UNIFORM BUFFER FAILED !");
             ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, xMat.propUniformBuffer.handle, xMat.propUniformBuffer.memory, 0));
 
             // Create stageBuffer and write uniform data to it.
@@ -372,11 +370,11 @@ bool Xavier::XSampleTeapot::loadAsserts()
             bufCreateInfo.pQueueFamilyIndices = nullptr;
 
             ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &bufCreateInfo, nullptr, &stageBuffer.handle));
-            ZV_VK_VALIDATE(allocateBufferMemory(stageBuffer.handle, &stageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), "Cannot allocate memory for staging buffer !");
+            ZV_VK_VALIDATE(allocateBufferMemory(stageBuffer.handle, &stageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, stageBuffer.memorySize), "Cannot allocate memory for staging buffer !");
             ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, stageBuffer.handle, stageBuffer.memory, 0));
 
             void *mapAddress;
-            ZV_VK_CHECK(vkMapMemory(xParams.xDevice, stageBuffer.memory, 0, stageBuffer.size, 0, &mapAddress));
+            ZV_VK_CHECK(vkMapMemory(xParams.xDevice, stageBuffer.memory, 0, stageBuffer.memorySize, 0, &mapAddress));
 
             memcpy(mapAddress, &xMat.matProps, stageBuffer.size);
 
@@ -384,7 +382,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
             memRange.memory = stageBuffer.memory;
             memRange.pNext = nullptr;
             memRange.offset = 0;
-            memRange.size = stageBuffer.size;
+            memRange.size = stageBuffer.memorySize;
             ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &memRange));
 
             // create command for transfer uniform data from staging buffer to uniform buffer.
@@ -443,9 +441,10 @@ bool Xavier::XSampleTeapot::loadAsserts()
             ZV_VK_CHECK(vkWaitForFences(xParams.xDevice, 1, &fence, VK_TRUE, 1000000000ull));
             ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
             vkDestroyFence(xParams.xDevice, fence, nullptr);
+			vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
             vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
             vkFreeCommandBuffers(xParams.xDevice, xParams.xRenderCmdPool, 1, &copyCmd);
-            vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
+            
             
             xParamsTeapot.materials.push_back(xMat);
 
@@ -588,12 +587,12 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
 
         ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &bufCreateInfo, nullptr, &stageBuffer.handle));
 
-        ZV_VK_VALIDATE(allocateBufferMemory(stageBuffer.handle, &stageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), "Cannot allocate memory for staging buffer !");
+        ZV_VK_VALIDATE(allocateBufferMemory(stageBuffer.handle, &stageBuffer.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, stageBuffer.memorySize), "Cannot allocate memory for staging buffer !");
 
         ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, stageBuffer.handle, stageBuffer.memory, 0));
 
         void *mapAddress;
-        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, stageBuffer.memory, 0, stageBuffer.size, 0, &mapAddress));
+        ZV_VK_CHECK(vkMapMemory(xParams.xDevice, stageBuffer.memory, 0, stageBuffer.memorySize, 0, &mapAddress));
 
         memcpy(mapAddress, imageData, stageBuffer.size);
 
@@ -601,7 +600,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         memRange.memory = stageBuffer.memory;
         memRange.pNext = nullptr;
         memRange.offset = 0;
-        memRange.size = stageBuffer.size;
+        memRange.size = stageBuffer.memorySize;
         ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &memRange));
 
         // Create texture vkImage
@@ -670,7 +669,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         VkImageMemoryBarrier imgMemBarrier2 = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         imgMemBarrier2.pNext = nullptr;
         imgMemBarrier2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        imgMemBarrier2.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        imgMemBarrier2.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         imgMemBarrier2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         imgMemBarrier2.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         imgMemBarrier2.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -685,7 +684,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         {
             VkImageMemoryBarrier nextLevelLayoutTransferDst = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
             nextLevelLayoutTransferDst.pNext = nullptr;
-            nextLevelLayoutTransferDst.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferDst.srcAccessMask = 0;
             nextLevelLayoutTransferDst.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             nextLevelLayoutTransferDst.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
             nextLevelLayoutTransferDst.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -693,7 +692,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
             nextLevelLayoutTransferDst.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             nextLevelLayoutTransferDst.image = xTex->handle;
             nextLevelLayoutTransferDst.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 };
-            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferDst);
+            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferDst);
             
             VkImageBlit imgBlit = { };
             imgBlit.srcOffsets[0] = { 0, 0, 0 };
@@ -708,20 +707,20 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
             VkImageMemoryBarrier nextLevelLayoutTransferSrc = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
             nextLevelLayoutTransferSrc.pNext = nullptr;
             nextLevelLayoutTransferSrc.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            nextLevelLayoutTransferSrc.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            nextLevelLayoutTransferSrc.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             nextLevelLayoutTransferSrc.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             nextLevelLayoutTransferSrc.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             nextLevelLayoutTransferSrc.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             nextLevelLayoutTransferSrc.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             nextLevelLayoutTransferSrc.image = xTex->handle;
             nextLevelLayoutTransferSrc.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, i, 1, 0, 1 };
-            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferSrc);
+            vkCmdPipelineBarrier(copyCmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &nextLevelLayoutTransferSrc);
         }
         
         // After generation for mipmap, we shall set the whole image layout for shader reading.
         VkImageMemoryBarrier wholeImageLayoutShaderReading = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
         wholeImageLayoutShaderReading.pNext = nullptr;
-        wholeImageLayoutShaderReading.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        wholeImageLayoutShaderReading.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
         wholeImageLayoutShaderReading.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         wholeImageLayoutShaderReading.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
         wholeImageLayoutShaderReading.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -754,8 +753,8 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         ZV_VK_CHECK(vkWaitForFences(xParams.xDevice, 1, &fence, VK_TRUE, 1000000000ull));
         ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
         vkDestroyFence(xParams.xDevice, fence, nullptr);
+		vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
         vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
-        vkDestroyBuffer(xParams.xDevice, stageBuffer.handle, nullptr);
         vkFreeCommandBuffers(xParams.xDevice, xParams.xRenderCmdPool, 1, &copyCmd);
 
         // Create Sampler for the texture
@@ -831,9 +830,9 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
 
     // Record Vertex
     // Ensure that the component of UV Components is 2
-    if (mesh->mNumUVComponents[0] != 2)
+    if (mesh->mNumUVComponents[0] < 2)
     {
-        std::cout << "The component of UV Components is not 2 !" << std::endl;
+        std::cout << "The component of UV Components is less than 2 !" << std::endl;
         return false;
     }
 
@@ -939,12 +938,12 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
     
     ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &stageBufCreateInfo, nullptr, &staging.handle));
 
-    ZV_VK_VALIDATE(allocateBufferMemory(staging.handle, &staging.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), "ERROR !");
+    ZV_VK_VALIDATE(allocateBufferMemory(staging.handle, &staging.memory, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, staging.memorySize), "ERROR !");
 
     ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, staging.handle, staging.memory, 0));
 
     void *mappedAddr;
-    ZV_VK_CHECK(vkMapMemory(xParams.xDevice, staging.memory, 0, staging.size, 0, &mappedAddr));
+    ZV_VK_CHECK(vkMapMemory(xParams.xDevice, staging.memory, 0, staging.memorySize, 0, &mappedAddr));
 
     memcpy(mappedAddr, &cameraAndLights, staging.size);
 
@@ -952,7 +951,7 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
     mappedRange.pNext = nullptr;
     mappedRange.memory = staging.memory;
     mappedRange.offset = 0;
-    mappedRange.size = staging.size;
+    mappedRange.size = staging.memorySize;
     ZV_VK_CHECK(vkFlushMappedMemoryRanges(xParams.xDevice, 1, &mappedRange));
 
     // Create common uniform buffer.
@@ -968,7 +967,7 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
 
     ZV_VK_CHECK(vkCreateBuffer(xParams.xDevice, &commonUniformBufCreateInfo, nullptr, &xParamsTeapot.commonUniform.handle));
 
-    ZV_VK_VALIDATE(allocateBufferMemory(xParamsTeapot.commonUniform.handle, &xParamsTeapot.commonUniform.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT), "ERROR !");
+    ZV_VK_VALIDATE(allocateBufferMemory(xParamsTeapot.commonUniform.handle, &xParamsTeapot.commonUniform.memory, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, xParamsTeapot.commonUniform.memorySize), "ERROR !");
 
     ZV_VK_CHECK(vkBindBufferMemory(xParams.xDevice, xParamsTeapot.commonUniform.handle, xParamsTeapot.commonUniform.memory, 0));
 
@@ -1064,8 +1063,10 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
     vkUpdateDescriptorSets(xParams.xDevice, 1, &commonSetWrite, 0, nullptr);
 
     ZV_VK_CHECK(vkQueueWaitIdle(xParams.xGraphicQueue));
+
+	vkDestroyBuffer(xParams.xDevice, staging.handle, nullptr);
     vkFreeMemory(xParams.xDevice, staging.memory, nullptr);
-    vkDestroyBuffer(xParams.xDevice, staging.handle, nullptr);
+    
 
      return true;
 }

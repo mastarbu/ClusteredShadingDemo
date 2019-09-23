@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/string_cast.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
@@ -131,8 +132,8 @@ bool Xavier::XSampleTeapot::loadAsserts()
         // Create staging buffer for vertex buffer.
         BufferParameters vertexStageBuffer;
         vertexStageBuffer.size = xParams.xVertexBuffer.size;
-        VkBufferCreateInfo vertStageBufCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 
+        VkBufferCreateInfo vertStageBufCreateInfo = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
         vertStageBufCreateInfo.flags = 0;
         vertStageBufCreateInfo.pNext = nullptr;
         vertStageBufCreateInfo.queueFamilyIndexCount = 0;
@@ -285,6 +286,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
         submit.signalSemaphoreCount = 0;
         submit.pSignalSemaphores = nullptr;
         vkQueueSubmit(xParams.xGraphicQueue, 1, &submit, xParams.xCopyFence);
+
         // Destroy two staging buffers.
         vkQueueWaitIdle(xParams.xGraphicQueue);
 
@@ -298,11 +300,16 @@ bool Xavier::XSampleTeapot::loadAsserts()
         for (uint32_t i = 0; i < scene->mNumMaterials; ++i)
         {
             aiMaterial *material = scene->mMaterials[i];
-            XMaterialTeapot xMat = {};
+            XMaterialTeapot xMat;
             std::cout << material->GetName().C_Str() << std::endl;
 
+			if ( 0 == std::strcmp(material->GetName().C_Str(), AI_DEFAULT_MATERIAL_NAME))
+			{
+				// Set the default the texture and the material properties 
+				// TODO
+			}
             // Load Diffuse Texture.
-            if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0)
+            else if (material->GetTextureCount(aiTextureType_DIFFUSE) > 0)
             {
                 aiString texFileName;
                 if (aiReturn_SUCCESS == scene->mMaterials[i]->GetTexture(aiTextureType_DIFFUSE, 0, &texFileName))
@@ -312,13 +319,12 @@ bool Xavier::XSampleTeapot::loadAsserts()
                     {
                         xMat.texDiffuse = xTex;
                     }
-
                     else 
 					{
                         // Load dummy texture
                         // However we dont have dummy texture to load 
                         // [TODO]
-                        std::cout << "Texture loading failed, I dont know what to do next !" << std::endl;
+                        std::cout << "Texture loading failed, I dont know what to do next!" << std::endl;
                         return false;
                     }
                 }
@@ -330,7 +336,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
             }
 
             // Load Material Properties.
-            aiColor4D kADSE[4];
+			aiColor4D kADSE[4] = {};
             material->Get(AI_MATKEY_COLOR_AMBIENT, kADSE[0]);
             material->Get(AI_MATKEY_COLOR_DIFFUSE, kADSE[1]);
             material->Get(AI_MATKEY_COLOR_SPECULAR, kADSE[2]);
@@ -445,9 +451,7 @@ bool Xavier::XSampleTeapot::loadAsserts()
             vkFreeMemory(xParams.xDevice, stageBuffer.memory, nullptr);
             vkFreeCommandBuffers(xParams.xDevice, xParams.xRenderCmdPool, 1, &copyCmd);
             
-            
             xParamsTeapot.materials.push_back(xMat);
-
         }
          
         // Create and update descriptors for all materials.
@@ -627,7 +631,6 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         
         ZV_VK_CHECK(vkBindImageMemory(xParams.xDevice, xTex->handle, xTex->memory, 0));
 
-
         VkCommandBuffer copyCmd;
 
         VkCommandBufferAllocateInfo cmdbufAllocInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
@@ -775,7 +778,7 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         smlCreateInfo.maxAnisotropy = 1.0F;
         smlCreateInfo.compareEnable = VK_FALSE;
         smlCreateInfo.compareOp = VK_COMPARE_OP_NEVER;
-        smlCreateInfo.minLod = 4.0f;
+        smlCreateInfo.minLod = 0.0f;
         smlCreateInfo.maxLod = 4.0f;
         smlCreateInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
         smlCreateInfo.unnormalizedCoordinates = VK_FALSE;
@@ -791,7 +794,6 @@ bool Xavier::XSampleTeapot::loadTextureFromFile(const std::string &file, const s
         imgViewCreateInfo.components = { VK_COMPONENT_SWIZZLE_R, VK_COMPONENT_SWIZZLE_G, VK_COMPONENT_SWIZZLE_B, VK_COMPONENT_SWIZZLE_A };
         imgViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, xTex->mipmapLevels, 0, 1 };
         ZV_VK_CHECK(vkCreateImageView(xParams.xDevice, &imgViewCreateInfo, nullptr, &xTex->view));
-
     }
     else
     {
@@ -908,6 +910,11 @@ bool Xavier::XSampleTeapot::loadMesh(aiMesh * mesh, uint32_t &indexBase)
     return true;
 }
 
+static void printMatrix(const glm::mat4 &aMat)
+{
+	std::cout << glm::to_string(aMat) << std::endl;
+}
+
 bool Xavier::XSampleTeapot::prepareCameraAndLights()
 {
     struct common {
@@ -916,12 +923,20 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
         glm::vec4 view ;
     } cameraAndLights;
     // calculate the data;
-    glm::mat4 id;
+	glm::mat4 id(1.0f);
+	
     glm::mat4 model = glm::translate(id, glm::vec3{0.0f, 3.5f, 0.0f}) * glm::scale(id, glm::vec3{ 0.1f, 0.1f, 0.1f });
     glm::mat4 proj = glm::perspective(glm::radians(60.0f), (float)xParams.xSwapchain.extent.width / (float)xParams.xSwapchain.extent.height, 0.1f, 100.0f);
     glm::mat4 view = glm::lookAt(glm::vec3{ 0.0f, 0.0f, 10.0f }, glm::vec3{ 0.0f,0.0f,0.0f }, glm::vec3{ 0.0f, 1.0f, 0.0f });
 
+	//printMatrix(id);
+	//printMatrix(model);
+	//printMatrix(proj);
+	//printMatrix(view);
+
     cameraAndLights.MVP = proj * view * model;
+
+	//printMatrix(cameraAndLights.MVP);
     cameraAndLights.lightPos = { 0.0f,10.0f,0.0f, 0.0f };
     cameraAndLights.view = { 0.0f, 0.0f, 10.0f ,0.0f };
 
@@ -1067,7 +1082,6 @@ bool Xavier::XSampleTeapot::prepareCameraAndLights()
 	vkDestroyBuffer(xParams.xDevice, staging.handle, nullptr);
     vkFreeMemory(xParams.xDevice, staging.memory, nullptr);
     
-
      return true;
 }
 
@@ -1213,7 +1227,6 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
         shaderModuleCreateInfo[0].codeSize = texTeapotVertexShaderData.size();
         ZV_VK_CHECK(vkCreateShaderModule(xParams.xDevice, &shaderModuleCreateInfo[0], nullptr, &shaderModule[0]));
 
-
         /// Create shader module of fragment shader.
         std::vector<char> texTeapotFragmentShaderData(m_getFileBinaryContent("Data/" SAMPLE_NUMBER "/texTeapot.frag.spv"));
         shaderModuleCreateInfo[1].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1231,6 +1244,7 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
         shaderModuleCreateInfo[2].pCode = (uint32_t *)noneTexTeapotVertexShaderData.data();
         shaderModuleCreateInfo[2].codeSize = noneTexTeapotVertexShaderData.size();
         ZV_VK_CHECK(vkCreateShaderModule(xParams.xDevice, &shaderModuleCreateInfo[2], nullptr, &shaderModule[2]));
+
         /// Create shader module of fragment shader.
         std::vector<char> noneTexTeapotFragmentShaderData(m_getFileBinaryContent("Data/" SAMPLE_NUMBER "/noneTexTeapot.frag.spv"));
         shaderModuleCreateInfo[3].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -1462,7 +1476,6 @@ bool Xavier::XSampleTeapot::prepareGraphicsPipeline()
     /*graphicPipelineCreateInfo.layout = xParamsTeapot.xBoldPipelineLayout;
     graphicPipelineCreateInfo.pStages = &shaderStages[2];
     ZV_VK_CHECK(vkCreateGraphicsPipelines(xParams.xDevice, VK_NULL_HANDLE, 1, &graphicPipelineCreateInfo, nullptr, &xParamsTeapot.xBoldPipeline));*/
-
     return true;
 }
 
@@ -1498,7 +1511,6 @@ bool Xavier::XSampleTeapot::prepareDescriptorSetLayout()
     descTexSetLayoutCreateInfo.bindingCount = 2;
     descTexSetLayoutCreateInfo.pBindings = &bindings[0];
     ZV_VK_CHECK(vkCreateDescriptorSetLayout(xParams.xDevice, &descTexSetLayoutCreateInfo, nullptr, &xParamsTeapot.xTexDescSetLayout));
-
     return true;
 }
 
@@ -1535,7 +1547,6 @@ bool Xavier::XSampleTeapot::createDepthBuffer(Xavier::ImageParameters &depthImag
     depthImageViewCreateInfo.format = VK_FORMAT_D16_UNORM;
     /*depthImageViewCreateInfo.components;*/
     depthImageViewCreateInfo.subresourceRange = { VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1 };
-
     ZV_VK_CHECK(vkCreateImageView(xParams.xDevice, &depthImageViewCreateInfo, nullptr, &depthImage.view))
 
     return true;
@@ -1586,12 +1597,13 @@ bool Xavier::XSampleTeapot::buildCommandBuffer(VkCommandBuffer &xRenderCmdBuffer
 
     descSets[0].push_back(xParamsTeapot.materials[0].texDiffuse? xParamsTeapot.materials[0].descriptorSet: xParamsTeapot.materials[1].descriptorSet);
     descSets[1].push_back(xParamsTeapot.materials[0].texDiffuse? xParamsTeapot.materials[1].descriptorSet: xParamsTeapot.materials[0].descriptorSet);
+
+
     vkCmdBeginRenderPass(xRenderCmdBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     
     uint32_t vertexOffset = 0;
     for (uint32_t i = 0; i < xParamsTeapot.Meshes.size(); ++i)
     {
-
         uint32_t matIndex = xParamsTeapot.Meshes[i].materialIndex;
         if (xParamsTeapot.materials[matIndex].texDiffuse != nullptr)
         {

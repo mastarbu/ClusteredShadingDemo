@@ -59,7 +59,6 @@ namespace Xavier {
         framebufferCreateInfo.width = xParams.xSwapchain.extent.width;
         framebufferCreateInfo.height = xParams.xSwapchain.extent.height;
         framebufferCreateInfo.layers = 1;
-
         ZV_VK_CHECK(vkCreateFramebuffer(xParams.xDevice, &framebufferCreateInfo, nullptr, &currentFrameData.virtualFrameData->frameBuffer));
 
         std::vector<float> colorClearValue = { 0.5f, 0.5f, 0.5f, 0.0f };
@@ -106,7 +105,6 @@ namespace Xavier {
         submitInfo.pCommandBuffers = &currentFrameData.virtualFrameData->commandBuffer;
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = &currentFrameData.virtualFrameData->renderFinishedSemphore;
-
         ZV_VK_CHECK(vkQueueSubmit(xParams.xGraphicQueue, 1, &submitInfo, currentFrameData.virtualFrameData->CPUGetChargeOfCmdBufFence));  
 
         // Present the image.

@@ -28,6 +28,7 @@ void main()
     vec3 N = normalize(f_norm);
     vec3 H = normalize(V + L);
     //vec3 color = (material.kD * texture(diffuseTex, f_uv) * dot(N, L) + material.kS * pow(dot(N, H), 10)).rgb;
-    vec3 color = texture(diffuseTex, f_uv).xyz;
+    vec3 color = texture(diffuseTex, f_uv, 0).xyz;
+    // vec3 color = vec3(1.0, 0.0, 0.0);
     o_color = vec4(color.rgb, 1.0);
 }

@@ -13,6 +13,13 @@ namespace Xavier {
         ~XSampleTeapot() {}
 
         struct XMaterialTeapot {
+			XMaterialTeapot()
+				: texDiffuse(nullptr)
+				, matProps()
+				, propUniformBuffer()
+				, descriptorSet(VK_NULL_HANDLE)
+			{ }
+
             XTexture *texDiffuse;
             XMaterialProperties matProps;
             BufferParameters propUniformBuffer;
